@@ -1,0 +1,22 @@
+{
+  "name": "mysql-web-frontend",
+  "version": "1.0.0",
+  "description": "A Web Interface for a MySQL Server",
+  "main": "src/index.js",
+  "scripts": {
+    "deploy": "node src/index.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/JMTNTBANG/MySQL-Web-Frontend.git"
+  },
+  "author": "JMTNTBANG",
+  "license": "GPL-3.0",
+  "bugs": {
+    "url": "https://github.com/JMTNTBANG/MySQL-Web-Frontend/issues"
+  },
+  "homepage": "https://github.com/JMTNTBANG/MySQL-Web-Frontend#readme",
+  "dependencies": {
+    "mysql": "^2.18.1"
+  }
+}
