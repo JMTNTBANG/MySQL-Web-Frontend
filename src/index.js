@@ -1,9 +1,10 @@
-var mysql = require("mysql");
-var http = require("http");
-var url = require("url");
-var config = require("./config.json");
+const mysql = require("mysql");
+const http = require("http");
+const url = require("url");
+const config = require("./config.json");
+const fs = require("fs");
 
-var database = mysql.createConnection({
+const database = mysql.createConnection({
   host: config.server.ip,
   port: config.server.port,
   user: config.auth.username,
@@ -20,15 +21,16 @@ function gen_webpage(req, page) {
     database.query("SHOW SCHEMAS", function (err, result, fields) {
       let schemas = "";
       if (err) {
-        page.write(`${err}`)
-        page.end()
+        page.write(`${err}`);
+        page.end();
         return;
       }
-      schemas += '<form><label for="db-sel">Database:</label> <select id="db-sel">';
+      schemas +=
+        '<form onsubmit="db_submit(); return false;"><label for="db-sel">Database:</label> <select id="db-sel">';
       for (schema of result) {
-        schemas += '<option'
+        schemas += "<option";
         if (schema.Database == urlbar.query.db) schemas += " selected";
-        schemas += `>${schema.Database}</option>`;
+        schemas += ` value="${schema.Database}">${schema.Database}</option>`;
       }
       schemas += '</select> <input type="submit" value="Submit"></form>';
       database.query(
@@ -37,14 +39,16 @@ function gen_webpage(req, page) {
           let tables = "";
           if (urlbar.query.db) {
             if (err) {
-              page.write(`${err}`)
-              page.end()
+              page.write(`${err}`);
+              page.end();
               return;
             }
-            tables += '<form><label for="tabel-sel">Tables:</label> <select id="table-sel">';
+            tables +=
+              '<form onsubmit="table_submit(); return false;"><label for="tabel-sel">Tables:</label> <select id="table-sel">';
             for (table of result) {
-              tables += `<option`
-              if (table[`Tables_in_${urlbar.query.db}`] == urlbar.query.table) tables += " selected";
+              tables += `<option`;
+              if (table[`Tables_in_${urlbar.query.db}`] == urlbar.query.table)
+                tables += " selected";
               tables += `>${table[`Tables_in_${urlbar.query.db}`]}</option>`;
             }
             tables += '</select> <input type="submit" value="Submit"></form>';
@@ -55,8 +59,8 @@ function gen_webpage(req, page) {
               let final = "";
               if (urlbar.query.db && urlbar.query.table) {
                 if (err) {
-                  page.write(`${err}`)
-                  page.end()
+                  page.write(`${err}`);
+                  page.end();
                   return;
                 }
                 final += '<table style="width:100%;"><tr>';
@@ -83,11 +87,13 @@ function gen_webpage(req, page) {
   function gen_skeleton(data) {
     let payload = "";
     if (urlbar.pathname == "/home.html") {
+      const client_script = fs.readFileSync("src/client.js").toString();
+      const client_styles = fs.readFileSync("src/client.css").toString();
       let header = "<h1>Please Select a Database and Table:</h1>";
       if (urlbar.search && urlbar.query.db && urlbar.query.table) {
         header = `<h1>Contents of ${urlbar.query.table} in ${urlbar.query.db}:</h1>`;
       }
-      payload += `<style>table, th, td {border:1px solid black;}</style>${header}${data.schemas}${data.tables}${data.final}`;
+      payload += `<script>${client_script}</script><style>${client_styles}</style>${header}${data.schemas}${data.tables}${data.final}`;
       page.write(payload);
       page.end();
     }
