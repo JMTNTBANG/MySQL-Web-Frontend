@@ -24,10 +24,13 @@ function gen_webpage(req, page) {
         page.end()
         return;
       }
+      schemas += '<form><label for="db-sel">Database:</label> <select id="db-sel">';
       for (schema of result) {
-        schemas += `<option>${schema.Database}</option>`;
+        schemas += '<option'
+        if (schema.Database == urlbar.query.db) schemas += " selected";
+        schemas += `>${schema.Database}</option>`;
       }
-      schemas += "</select>";
+      schemas += '</select> <input type="submit" value="Submit"></form>';
       database.query(
         `SHOW TABLES FROM ${urlbar.query.db}`,
         function (err, result, fields) {
@@ -38,10 +41,13 @@ function gen_webpage(req, page) {
               page.end()
               return;
             }
+            tables += '<form><label for="tabel-sel">Tables:</label> <select id="table-sel">';
             for (table of result) {
-              tables += `<option>${table[`Tables_in_${urlbar.query.db}`]}</option>`;
+              tables += `<option`
+              if (table[`Tables_in_${urlbar.query.db}`] == urlbar.query.table) tables += " selected";
+              tables += `>${table[`Tables_in_${urlbar.query.db}`]}</option>`;
             }
-            tables += "</select>\n";
+            tables += '</select> <input type="submit" value="Submit"></form>';
           }
           database.query(
             `SELECT * FROM ${urlbar.query.db}.${urlbar.query.table}`,
@@ -81,7 +87,7 @@ function gen_webpage(req, page) {
       if (urlbar.search && urlbar.query.db && urlbar.query.table) {
         header = `<h1>Contents of ${urlbar.query.table} in ${urlbar.query.db}:</h1>`;
       }
-      payload += `<style>table, th, td {border:1px solid black;}</style>${header}${data.schemas} ${data.tables}${data.final}`;
+      payload += `<style>table, th, td {border:1px solid black;}</style>${header}${data.schemas}${data.tables}${data.final}`;
       page.write(payload);
       page.end();
     }
