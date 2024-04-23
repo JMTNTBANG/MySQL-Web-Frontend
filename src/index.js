@@ -19,8 +19,11 @@ function gen_webpage(req, page) {
   function get_db_data(callback) {
     database.query("SHOW SCHEMAS", function (err, result, fields) {
       let schemas = "";
-      if (err) throw err;
-      schemas += "Databases: <select>";
+      if (err) {
+        page.write(`${err}`)
+        page.end()
+        return;
+      }
       for (schema of result) {
         schemas += `<option>${schema.Database}</option>`;
       }
@@ -30,8 +33,11 @@ function gen_webpage(req, page) {
         function (err, result, fields) {
           let tables = "";
           if (urlbar.query.db) {
-            if (err) throw err;
-            tables += "Tables: <select>";
+            if (err) {
+              page.write(`${err}`)
+              page.end()
+              return;
+            }
             for (table of result) {
               tables += `<option>${table[`Tables_in_${urlbar.query.db}`]}</option>`;
             }
@@ -42,7 +48,11 @@ function gen_webpage(req, page) {
             function (err, result, fields) {
               let final = "";
               if (urlbar.query.db && urlbar.query.table) {
-                if (err) throw err;
+                if (err) {
+                  page.write(`${err}`)
+                  page.end()
+                  return;
+                }
                 final += '<table style="width:100%;"><tr>';
                 for (column of fields) {
                   final += `<th>${column.name}</th>`;
