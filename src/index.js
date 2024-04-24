@@ -5,6 +5,18 @@ const fs = require("fs");
 const express = require("express");
 const session = require("express-session");
 const path = require("path");
+const http = require("http");
+cinst https = require("https");
+
+const privateKey = fs.readFileSync('/etc/letsencrypt/live/db.jmtntbang.com/privkey.pem', 'utf8');
+const certificate = fs.readFileSync('/etc/letsencrypt/live/db.jmtntbang.com/cert.pem', 'utf8');
+const ca = fs.readFileSync('/etc/letsencrypt/live/db.jmtntbang.com/chain.pem', 'utf8');
+
+const credentials = {
+	key: privateKey,
+	cert: certificate,
+	ca: ca
+};
 
 const database = mysql.createConnection({
   host: config.server.ip,
@@ -135,4 +147,13 @@ app.post("/auth", function (request, response) {
   }
 });
 
-app.listen(80);
+const httpServer = http.createServer(app);
+const httpsServer = https.createServer(credentials, app);
+
+httpServer.listen(80, () => {
+	console.log('HTTP Server running on port 80');
+});
+
+httpsServer.listen(443, () => {
+	console.log('HTTPS Server running on port 443');
+});
