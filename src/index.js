@@ -135,4 +135,4 @@ app.post("/auth", function (request, response) {
   }
 });
 
-app.listen(443);
+app.listen(80);
