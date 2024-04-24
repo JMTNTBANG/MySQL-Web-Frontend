@@ -6,7 +6,7 @@ const express = require("express");
 const session = require("express-session");
 const path = require("path");
 const http = require("http");
-cinst https = require("https");
+const https = require("https");
 
 const privateKey = fs.readFileSync('/etc/letsencrypt/live/db.jmtntbang.com/privkey.pem', 'utf8');
 const certificate = fs.readFileSync('/etc/letsencrypt/live/db.jmtntbang.com/cert.pem', 'utf8');
