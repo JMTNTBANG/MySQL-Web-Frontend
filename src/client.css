@@ -1,5 +1,11 @@
+body {
+  font-family: Arial, sans-serif;
+  background-color: lightgray
+}
+
 table,
 th,
 td {
   border: 1px solid black;
+  background-color: white;
 }

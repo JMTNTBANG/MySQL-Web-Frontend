@@ -18,7 +18,7 @@
   "homepage": "https://github.com/JMTNTBANG/MySQL-Web-Frontend#readme",
   "dependencies": {
     "express": "^4.19.2",
-    "express-sessions": "^1.0.6",
+    "express-session": "^1.18.0",
     "mysql": "^2.18.1"
   }
 }

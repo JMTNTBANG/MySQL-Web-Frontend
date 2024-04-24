@@ -1,8 +1,10 @@
 const mysql = require("mysql");
-const http = require("http");
 const url = require("url");
 const config = require("./config.json");
 const fs = require("fs");
+const express = require("express");
+const session = require("express-session");
+const path = require("path");
 
 const database = mysql.createConnection({
   host: config.server.ip,
@@ -21,7 +23,7 @@ function gen_webpage(req, page) {
     database.query("SHOW SCHEMAS", function (err, result, fields) {
       let schemas = "";
       if (err) {
-        page.write(`${err}`);
+        page.send(`${err}`);
         page.end();
         return;
       }
@@ -39,7 +41,7 @@ function gen_webpage(req, page) {
           let tables = "";
           if (urlbar.query.db) {
             if (err) {
-              page.write(`${err}`);
+              page.send(`${err}`);
               page.end();
               return;
             }
@@ -59,7 +61,7 @@ function gen_webpage(req, page) {
               let final = "";
               if (urlbar.query.db && urlbar.query.table) {
                 if (err) {
-                  page.write(`${err}`);
+                  page.send(`${err}`);
                   page.end();
                   return;
                 }
@@ -86,19 +88,51 @@ function gen_webpage(req, page) {
   }
   function gen_skeleton(data) {
     let payload = "";
-    if (urlbar.pathname == "/home.html") {
-      const client_script = fs.readFileSync("src/client.js").toString();
-      const client_styles = fs.readFileSync("src/client.css").toString();
-      let header = "<h1>Please Select a Database and Table:</h1>";
-      if (urlbar.search && urlbar.query.db && urlbar.query.table) {
-        header = `<h1>Contents of ${urlbar.query.table} in ${urlbar.query.db}:</h1>`;
-      }
-      payload += `<script>${client_script}</script><style>${client_styles}</style>${header}${data.schemas}${data.tables}${data.final}`;
-      page.write(payload);
-      page.end();
+    const client_script = fs.readFileSync("src/client.js").toString();
+    const client_styles = fs.readFileSync("src/client.css").toString();
+    let header = "<h1>Please Select a Database and Table:</h1>";
+    let title = "Database Home"
+    if (urlbar.search && urlbar.query.db && urlbar.query.table) {
+      header = `<h1>Contents of ${urlbar.query.table} in ${urlbar.query.db}:</h1>`;
+      title = `Contents of ${urlbar.query.table} in ${urlbar.query.db}`
     }
+    payload += `<title>${title}</title><script>${client_script}</script><style>${client_styles}</style>${header}${data.schemas}${data.tables}${data.final}`;
+    page.send(payload);
+    page.end();
   }
   get_db_data(gen_skeleton);
 }
 
-http.createServer(gen_webpage).listen(8080);
+const app = express();
+app.use(session({ secret: "secret", resave: true, saveUninitialized: true }));
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
+app.use(express.static(path.join(__dirname, "static")));
+app.get("/", function (request, response) {
+  if (request.session.loggedin) {
+    gen_webpage(request, response);
+  } else {
+    response.sendFile(path.join(__dirname + "/login.html"));
+  }
+});
+app.post("/auth", function (request, response) {
+  let username = request.body.username;
+  let password = request.body.password;
+  if (username && password) {
+    database.query(
+      "SELECT * FROM auth.accounts WHERE username = ? AND password = ?",
+      [username, password],
+      function (error, results, fields) {
+        if (error) throw error;
+        if (results.length > 0) {
+          request.session.loggedin = true;
+          request.session.username = username;
+        }
+        response.redirect("/");
+        response.end();
+      }
+    );
+  }
+});
+
+app.listen(3000);
