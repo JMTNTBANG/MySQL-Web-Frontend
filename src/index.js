@@ -8,15 +8,29 @@ const path = require("path");
 const http = require("http");
 const https = require("https");
 
-const privateKey = fs.readFileSync('/etc/letsencrypt/live/db.jmtntbang.com/privkey.pem', 'utf8');
-const certificate = fs.readFileSync('/etc/letsencrypt/live/db.jmtntbang.com/cert.pem', 'utf8');
-const ca = fs.readFileSync('/etc/letsencrypt/live/db.jmtntbang.com/chain.pem', 'utf8');
+secured = true;
+try {
+  const privateKey = fs.readFileSync(
+    "/etc/letsencrypt/live/db.jmtntbang.com/privkey.pem",
+    "utf8"
+  );
+  const certificate = fs.readFileSync(
+    "/etc/letsencrypt/live/db.jmtntbang.com/cert.pem",
+    "utf8"
+  );
+  const ca = fs.readFileSync(
+    "/etc/letsencrypt/live/db.jmtntbang.com/chain.pem",
+    "utf8"
+  );
 
-const credentials = {
-	key: privateKey,
-	cert: certificate,
-	ca: ca
-};
+  const credentials = {
+    key: privateKey,
+    cert: certificate,
+    ca: ca,
+  };
+} catch {
+  secured = false;
+}
 
 const database = mysql.createConnection({
   host: config.server.ip,
@@ -148,12 +162,12 @@ app.post("/auth", function (request, response) {
 });
 
 const httpServer = http.createServer(app);
-const httpsServer = https.createServer(credentials, app);
-
-httpServer.listen(80, () => {
-	console.log('HTTP Server running on port 80');
+httpServer.listen(8080, () => {
+  console.log("HTTP Server running on port 80");
 });
-
-httpsServer.listen(443, () => {
-	console.log('HTTPS Server running on port 443');
-});
+if (secured) {
+  const httpsServer = https.createServer(credentials, app);
+  httpsServer.listen(443, () => {
+    console.log("HTTPS Server running on port 443");
+  });
+}
