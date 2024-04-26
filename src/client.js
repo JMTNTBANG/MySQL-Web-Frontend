@@ -7,3 +7,7 @@ function table_submit() {
     document.getElementById("table-sel").value
   }`;
 }
+
+function record_edit(id) {
+    location.search = `?db=${document.getElementById("db-sel").value}&table=${document.getElementById("table-sel").value}&edit=${id}`
+}

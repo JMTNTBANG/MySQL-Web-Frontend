@@ -91,19 +91,48 @@ function gen_webpage(req, page) {
                   page.end();
                   return;
                 }
-                final += '<table style="width:100%;"><tr>';
-                for (column of fields) {
-                  final += `<th>${column.name}</th>`;
-                }
-                final += `</tr>`;
-                for (row of result) {
-                  final += `<tr>`;
-                  for (value in row) {
-                    final += `<td>${row[value]}</td>`;
+                if (urlbar.query.edit) {
+                  final += `<form action="/save_record" method="post"><input type="submit" value="Save">`;
+                  let columns = [];
+                  for (column of fields) {
+                    columns.push(
+                      `<label for="${column.name}">${column.name}: </label>`
+                    );
+                  }
+                  let rows = [];
+                  for (row of result) {
+                    if (row["ID"] == urlbar.query.edit) {
+                      let current_column;
+                      for (value in row) {
+                        for (column of fields) {
+                          if (column.name == value) {
+                            current_column = column.name;
+                          }
+                        }
+                        rows.push(
+                          `<input type="text" name="${current_column}" id="${current_column}" value="${row[value]}">`
+                        );
+                      }
+                    }
+                  }
+                  for (let i = 0; i < columns.length; i++) {
+                    final += "<h3>" + columns[i] + rows[i] + "</h3>";
+                  }
+                } else {
+                  final += '<table style="width:100%;"><tr><th>[Edit]</th>';
+                  for (column of fields) {
+                    final += `<th>${column.name}</th>`;
                   }
                   final += `</tr>`;
+                  for (row of result) {
+                    final += `<tr><td><a onclick="record_edit(${row["ID"]})" style="color: blue">[Edit]</a></td>`;
+                    for (value in row) {
+                      final += `<td>${row[value]}</td>`;
+                    }
+                    final += `</tr>`;
+                  }
+                  final += `</table>`;
                 }
-                final += `</table>`;
               }
               callback({ schemas: schemas, tables: tables, final: final });
             }
@@ -117,12 +146,21 @@ function gen_webpage(req, page) {
     const client_script = fs.readFileSync("src/client.js").toString();
     const client_styles = fs.readFileSync("src/client.css").toString();
     let header = "<h1>Please Select a Database and Table:</h1>";
-    let title = "Database Home"
+    let title = "Database Home";
     if (urlbar.search && urlbar.query.db && urlbar.query.table) {
       header = `<h1>Contents of ${urlbar.query.table} in ${urlbar.query.db}:</h1>`;
-      title = `Contents of ${urlbar.query.table} in ${urlbar.query.db}`
+      title = `Contents of ${urlbar.query.table} in ${urlbar.query.db}`;
+      if (urlbar.query.edit) {
+        header = `<h1>Editing ID: ${urlbar.query.edit} of ${urlbar.query.table} in ${urlbar.query.db}:</h1>`;
+        title = `Editing ID: ${urlbar.query.edit} of ${urlbar.query.table} in ${urlbar.query.db}`;
+      }
     }
-    payload += `<title>${title}</title><script>${client_script}</script><style>${client_styles}</style>${header}${data.schemas}${data.tables}${data.final}`;
+    payload += `<title>${title}</title><script>${client_script}</script><style>${client_styles}</style>${header}`;
+    if (urlbar.query.edit) {
+      payload += `${data.final}`;
+    } else {
+      payload += `${data.schemas}${data.tables}${data.final}`;
+    }
     page.send(payload);
     page.end();
   }
@@ -160,9 +198,35 @@ app.post("/auth", function (request, response) {
     );
   }
 });
+app.post("/save_record", function (request, response) {
+  const record_information = url.parse(request.rawHeaders[33], true).query;
+  const record_data = request.body;
+  let changes = `UPDATE ${record_information.db}.${record_information.table} SET `;
+  let first = true;
+  for (column in record_data) {
+    let text = `'${record_data[column]}'`;
+    if (text == "'null'") {
+      text = "null";
+    }
+    if (first) {
+      changes += `\`${column}\` = ${text}`;
+      first = false;
+    } else {
+      changes += `, \`${column}\` = ${text}`;
+    }
+  }
+  changes += ` WHERE (\`ID\` = '${record_information.edit}');`;
+  database.query(changes, function (err, result, fields) {
+    if (err) {
+      response.send(`<script>alert("${err}"); history.back();</script>`);
+      response.end();
+      return;
+    }
+  });
+});
 
 const httpServer = http.createServer(app);
-httpServer.listen(8080, () => {
+httpServer.listen(80, () => {
   console.log("HTTP Server running on port 80");
 });
 if (secured) {
