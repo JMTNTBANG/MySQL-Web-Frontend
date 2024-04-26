@@ -49,7 +49,7 @@ function gen_webpage(req, page) {
     database.query("SHOW SCHEMAS", function (err, result, fields) {
       let schemas = "";
       if (err) {
-        page.send(`${err}`);
+        page.send(`<script>alert("${err}"); history.back();</script>`);
         page.end();
         return;
       }
@@ -67,7 +67,7 @@ function gen_webpage(req, page) {
           let tables = "";
           if (urlbar.query.db) {
             if (err) {
-              page.send(`${err}`);
+              page.send(`<script>alert("${err}"); history.back();</script>`);
               page.end();
               return;
             }
@@ -87,7 +87,7 @@ function gen_webpage(req, page) {
               let final = "";
               if (urlbar.query.db && urlbar.query.table) {
                 if (err) {
-                  page.send(`${err}`);
+                  page.send(`<script>alert("${err}"); history.back();</script>`);
                   page.end();
                   return;
                 }
