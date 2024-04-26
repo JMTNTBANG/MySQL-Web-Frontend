@@ -182,6 +182,10 @@ app.get("/", function (request, response) {
 app.post("/auth", function (request, response) {
   let username = request.body.username;
   let password = request.body.password;
+  let previous_query = url.parse(request.rawHeaders[33], true).search;
+  if (previous_query == null) {
+    previous_query = ''
+  }
   if (username && password) {
     database.query(
       "SELECT * FROM auth.accounts WHERE username = ? AND password = ?",
@@ -192,7 +196,7 @@ app.post("/auth", function (request, response) {
           request.session.loggedin = true;
           request.session.username = username;
         }
-        response.redirect("/");
+        response.redirect(`/${previous_query}`);
         response.end();
       }
     );
