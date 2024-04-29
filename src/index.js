@@ -63,19 +63,34 @@ function gen_webpage(req, page) {
               let final = "";
               if (urlbar.query.db && urlbar.query.table) {
                 if (err) {
-                  page.send(`<script>alert("${err}"); history.back();</script>`);
+                  page.send(
+                    `<script>alert("${err}"); history.back();</script>`
+                  );
                   page.end();
                   return;
                 }
+                let exists = false;
                 if (urlbar.query.edit) {
                   final += `<form action="/save_record" method="post"><input type="submit" value="Save">`;
                   let columns = [];
+                  let rows = [];
                   for (column of fields) {
                     columns.push(
                       `<label for="${column.name}">${column.name}: </label>`
                     );
+                    for (row of result) {
+                      if (row["ID"] == urlbar.query.edit) {
+                        exists = true;
+                      }
+                    }
+                    if (!exists) {
+                      page.send(
+                        `<script>alert("Record Does not Exist in Table"); history.back();</script>`
+                      );
+                      page.end();
+                      return;
+                    }
                   }
-                  let rows = [];
                   for (row of result) {
                     if (row["ID"] == urlbar.query.edit) {
                       let current_column;
@@ -94,7 +109,14 @@ function gen_webpage(req, page) {
                   for (let i = 0; i < columns.length; i++) {
                     final += "<h3>" + columns[i] + rows[i] + "</h3>";
                   }
+                } else if (urlbar.query.create) {
+                  final += `<form action="/save_record" method="post"><input type="submit" value="Save">`;
+                  for (column of fields) {
+                    final += `<h3><label for="${column.name}">${column.name}: </label><input type="text" name="${column.name}" id="${column.name}"></h3>`;
+                  }
                 } else {
+                  final +=
+                    '<a onclick="record_create()" style="color: blue">Create Entry</a>';
                   final += '<table style="width:100%;"><tr><th>[Edit]</th>';
                   for (column of fields) {
                     final += `<th>${column.name}</th>`;
@@ -129,10 +151,13 @@ function gen_webpage(req, page) {
       if (urlbar.query.edit) {
         header = `<h1>Editing ID: ${urlbar.query.edit} of ${urlbar.query.table} in ${urlbar.query.db}:</h1>`;
         title = `Editing ID: ${urlbar.query.edit} of ${urlbar.query.table} in ${urlbar.query.db}`;
+      } else if (urlbar.query.create) {
+        header = `<h1>Creating Record in ${urlbar.query.table} in ${urlbar.query.db}:</h1>`;
+        title = `Creating Record in ${urlbar.query.table} in ${urlbar.query.db}`;
       }
     }
     payload += `<title>${title}</title><script>${client_script}</script><style>${client_styles}</style>${header}`;
-    if (urlbar.query.edit) {
+    if (urlbar.query.edit || urlbar.query.create) {
       payload += `${data.final}`;
     } else {
       payload += `${data.schemas}${data.tables}${data.final}`;
@@ -160,7 +185,7 @@ app.post("/auth", function (request, response) {
   let password = request.body.password;
   let previous_query = url.parse(request.rawHeaders[33], true).search;
   if (previous_query == null) {
-    previous_query = ''
+    previous_query = "";
   }
   if (username && password) {
     database.query(
@@ -181,32 +206,60 @@ app.post("/auth", function (request, response) {
 app.post("/save_record", function (request, response) {
   const record_information = url.parse(request.rawHeaders[33], true).query;
   const record_data = request.body;
-  let changes = `UPDATE ${record_information.db}.${record_information.table} SET `;
-  let first = true;
-  for (column in record_data) {
-    let text = `'${record_data[column]}'`;
-    if (text == "'null'") {
-      text = "null";
+  let changes = "";
+  if (record_information.edit) {
+    changes = `UPDATE ${record_information.db}.${record_information.table} SET `;
+    let first = true;
+    for (column in record_data) {
+      let text = `'${record_data[column]}'`;
+      if (text == "'null'") {
+        text = "null";
+      }
+      if (first) {
+        changes += `\`${column}\` = ${text}`;
+        first = false;
+      } else {
+        changes += `, \`${column}\` = ${text}`;
+      }
     }
-    if (first) {
-      changes += `\`${column}\` = ${text}`;
-      first = false;
-    } else {
-      changes += `, \`${column}\` = ${text}`;
+    changes += ` WHERE (\`ID\` = '${record_information.edit}');`;
+  } else if (record_information.create) {
+    let columns = "";
+    let values = "";
+    let first = true;
+    for (column in record_data) {
+      let text = `'${record_data[column]}'`;
+      if (text == "'null'") {
+        text = "null";
+      }
+      if (text != "''") {
+        if (first) {
+          columns += `\`${column}\``;
+          values += `${text}`;
+          first = false;
+        } else {
+          columns += `, \`${column}\``;
+          values += `, ${text}`;
+        }
+      }
+      changes = `INSERT INTO ${record_information.db}.${record_information.table} (${columns}) VALUES (${values});`;
     }
   }
-  changes += ` WHERE (\`ID\` = '${record_information.edit}');`;
   database.query(changes, function (err, result, fields) {
     if (err) {
       response.send(`<script>alert("${err}"); history.back();</script>`);
       response.end();
       return;
     }
+    response.redirect(
+      `/?db=${record_information.db}&table=${record_information.table}`
+    );
+    response.end();
   });
 });
 
 const httpServer = http.createServer(app);
-httpServer.listen(80, () => {
+httpServer.listen(8080, () => {
   console.log("HTTP Server running on port 80");
 });
 

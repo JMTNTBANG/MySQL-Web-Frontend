@@ -11,3 +11,7 @@ function table_submit() {
 function record_edit(id) {
     location.search = `?db=${document.getElementById("db-sel").value}&table=${document.getElementById("table-sel").value}&edit=${id}`
 }
+
+function record_create() {
+  location.search = `?db=${document.getElementById("db-sel").value}&table=${document.getElementById("table-sel").value}&create=true`
+}
