@@ -19,6 +19,9 @@ database.connect(function (err) {
   if (err) throw err;
 });
 
+const client_script = fs.readFileSync("src/client.js").toString();
+const client_styles = fs.readFileSync("src/client.css").toString();
+
 function gen_webpage(req, page) {
   const urlbar = url.parse(req.url, true);
   function get_db_data(callback) {
@@ -114,14 +117,17 @@ function gen_webpage(req, page) {
                   for (column of fields) {
                     final += `<h3><label for="${column.name}">${column.name}: </label><input type="text" name="${column.name}" id="${column.name}"></h3>`;
                   }
+                } else if (urlbar.query.delete) {
+                  final += `<form action="/delete_record" method="post"><input type="number" name="ID" id="ID" required><input type="submit" value="Delete">`;
                 } else {
-                  final += '<table style="width:100%;"><tr><th><a onclick="record_create()" style="color: blue; cursor: pointer">Create</a></th>';
+                  final +=
+                    '<table style="width:100%;"><tr><th><a onclick="record_create()" style="color: blue; cursor: pointer">Create</a></th>';
                   for (column of fields) {
                     final += `<th>${column.name}</th>`;
                   }
                   final += `</tr>`;
                   for (row of result) {
-                    final += `<tr><td><a onclick="record_edit(${row["ID"]})" style="color: blue; cursor: pointer">Edit</a></td>`;
+                    final += `<tr><td><a onclick="record_edit(${row["ID"]})" style="color: blue; cursor: pointer">Edit</a> <a onclick="record_delete(${row["ID"]})" style="color: red; cursor: pointer">Delete</a></td>`;
                     for (value in row) {
                       final += `<td>${row[value]}</td>`;
                     }
@@ -139,8 +145,6 @@ function gen_webpage(req, page) {
   }
   function gen_skeleton(data) {
     let payload = "";
-    const client_script = fs.readFileSync("src/client.js").toString();
-    const client_styles = fs.readFileSync("src/client.css").toString();
     let header = "<h1>Please Select a Database and Table:</h1>";
     let title = "Database Home";
     if (urlbar.search && urlbar.query.db && urlbar.query.table) {
@@ -152,10 +156,13 @@ function gen_webpage(req, page) {
       } else if (urlbar.query.create) {
         header = `<h1>Creating Record in ${urlbar.query.table} in ${urlbar.query.db}:</h1>`;
         title = `Creating Record in ${urlbar.query.table} in ${urlbar.query.db}`;
+      } else if (urlbar.query.delete) {
+        header = `<h1>Please Confirm the ID of the Record you are deleting:</h1>`;
+        title = `Deleting Record`;
       }
     }
     payload += `<title>${title}</title><script>${client_script}</script><style>${client_styles}</style>${header}`;
-    if (urlbar.query.edit || urlbar.query.create) {
+    if (urlbar.query.edit || urlbar.query.create || urlbar.query.delete) {
       payload += `${data.final}`;
     } else {
       payload += `${data.schemas}${data.tables}${data.final}`;
@@ -255,7 +262,31 @@ app.post("/save_record", function (request, response) {
     response.end();
   });
 });
-
+app.post("/delete_record", function (request, response) {
+  const record_information = url.parse(request.rawHeaders[33], true).query;
+  const record_data = request.body;
+  if (record_data.ID != record_information.delete) {
+    response.send(
+      `<script>alert("You did not enter the correct ID"); history.back();</script>`
+    );
+    response.end();
+    return;
+  }
+  database.query(
+    `DELETE FROM ${record_information.db}.${record_information.table} WHERE ID='${record_information.delete}'`,
+    function (err, result) {
+      let final = `<title>Deletion Successful</title><script>${client_script}</script><style>${client_styles}</style>`;
+      if (err) {
+        response.send(`<script>alert("${err}"); history.back();</script>`);
+        response.end();
+        return;
+      }
+      final += `<h2>Successfully Deleted ID ${record_information.delete}</h2><form onsubmit="location.href = '/?db=${record_information.db}&table=${record_information.table}'; return false;"><input type="submit" value="Go Back"></form>`;
+      response.send(final);
+      response.end();
+    }
+  );
+});
 const httpServer = http.createServer(app);
 httpServer.listen(8080, () => {
   console.log("HTTP Server running on port 80");
