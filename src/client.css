@@ -8,4 +8,5 @@ th,
 td {
   border: 1px solid black;
   background-color: white;
+  border-collapse: collapse;
 }
