@@ -22,6 +22,15 @@ database.connect(function (err) {
 const client_script = fs.readFileSync("src/client.js").toString();
 const client_styles = fs.readFileSync("src/client.css").toString();
 
+function format(value) {
+  let newValue = value;
+  // Format DateTime Values
+  try {
+    newValue = value.toISOString().split("T").join(" ").slice(0, -5);
+  } catch {}
+  return newValue;
+}
+
 function gen_webpage(req, page) {
   const urlbar = url.parse(req.url, true);
   function get_db_data(callback) {
@@ -103,8 +112,14 @@ function gen_webpage(req, page) {
                             current_column = column.name;
                           }
                         }
+                        let val = row[value];
+                        try {
+                          val = val.toISOString();
+                        } catch {}
                         rows.push(
-                          `<input type="text" name="${current_column}" id="${current_column}" value="${row[value]}">`
+                          `<input type="text" name="${current_column}" id="${current_column}" value="${format(
+                            row[value]
+                          )}">`
                         );
                       }
                     }
@@ -129,7 +144,7 @@ function gen_webpage(req, page) {
                   for (row of result) {
                     final += `<tr><td><a onclick="record_edit(${row["ID"]})" style="color: blue; cursor: pointer">Edit</a> <a onclick="record_delete(${row["ID"]})" style="color: red; cursor: pointer">Delete</a></td>`;
                     for (value in row) {
-                      final += `<td>${row[value]}</td>`;
+                      final += `<td>${format(row[value])}</td>`;
                     }
                     final += `</tr>`;
                   }
