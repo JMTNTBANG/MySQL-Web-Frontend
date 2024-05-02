@@ -115,15 +115,13 @@ function gen_webpage(req, page) {
                     final += `<h3><label for="${column.name}">${column.name}: </label><input type="text" name="${column.name}" id="${column.name}"></h3>`;
                   }
                 } else {
-                  final +=
-                    '<a onclick="record_create()" style="color: blue">Create Entry</a>';
-                  final += '<table style="width:100%;"><tr><th>[Edit]</th>';
+                  final += '<table style="width:100%;"><tr><th><a onclick="record_create()" style="color: blue; cursor: pointer">Create</a></th>';
                   for (column of fields) {
                     final += `<th>${column.name}</th>`;
                   }
                   final += `</tr>`;
                   for (row of result) {
-                    final += `<tr><td><a onclick="record_edit(${row["ID"]})" style="color: blue">[Edit]</a></td>`;
+                    final += `<tr><td><a onclick="record_edit(${row["ID"]})" style="color: blue; cursor: pointer">Edit</a></td>`;
                     for (value in row) {
                       final += `<td>${row[value]}</td>`;
                     }
