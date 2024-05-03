@@ -138,9 +138,42 @@ function gen_webpage(req, page) {
                   final +=
                     '<table style="width:100%;"><tr><th><a onclick="record_create()" style="color: blue; cursor: pointer">Create</a></th>';
                   for (column of fields) {
-                    final += `<th>${column.name}</th>`;
+                    if (urlbar.query.sortBy == column.name) {
+                      if (urlbar.query.reversed == "false") {
+                        final += `<th><a onclick="sort_by_column('${column.name}')" style="color: blue; cursor: pointer">${column.name}</a></th>`;
+                      } else {
+                        final += `<th><a onclick="sort_by_column('${column.name}')" style="color: red; cursor: pointer">${column.name}</a></th>`;
+                      }
+                    } else {
+                      final += `<th><a onclick="sort_by_column('${column.name}')" style="cursor: pointer">${column.name}</a></th>`;
+                    }
                   }
                   final += `</tr>`;
+                  if (urlbar.query.sortBy) {
+                    if (urlbar.query.reversed == "false") {
+                      result.sort((a, b) => {
+                        if (a[urlbar.query.sortBy] > b[urlbar.query.sortBy]) {
+                          return 1;
+                        } else if (
+                          a[urlbar.query.sortBy] < b[urlbar.query.sortBy]
+                        ) {
+                          return -1;
+                        }
+                        return 0;
+                      });
+                    } else {
+                      result.sort((a, b) => {
+                        if (a[urlbar.query.sortBy] < b[urlbar.query.sortBy]) {
+                          return 1;
+                        } else if (
+                          a[urlbar.query.sortBy] > b[urlbar.query.sortBy]
+                        ) {
+                          return -1;
+                        }
+                        return 0;
+                      });
+                    }
+                  }
                   for (row of result) {
                     final += `<tr><td><a onclick="record_edit(${row["ID"]})" style="color: blue; cursor: pointer">Edit</a> <a onclick="record_delete(${row["ID"]})" style="color: red; cursor: pointer">Delete</a></td>`;
                     for (value in row) {
@@ -321,5 +354,5 @@ try {
       console.log("HTTPS Server running on port 443");
     });
 } catch {
-  console.log("Caution: Connections will not be secured")
+  console.log("Caution: Connections will not be secured");
 }

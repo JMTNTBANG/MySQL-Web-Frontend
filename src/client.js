@@ -27,3 +27,15 @@ function record_create() {
     document.getElementById("table-sel").value
   }&create=true`;
 }
+
+function sort_by_column(column) {
+  if (location.search.includes(`sortBy=${column}&reversed=false`)) {
+    location.search = `?db=${document.getElementById("db-sel").value}&table=${
+      document.getElementById("table-sel").value
+    }&sortBy=${column}&reversed=true`;
+  } else {
+    location.search = `?db=${document.getElementById("db-sel").value}&table=${
+      document.getElementById("table-sel").value
+    }&sortBy=${column}&reversed=false`;
+  }
+}
