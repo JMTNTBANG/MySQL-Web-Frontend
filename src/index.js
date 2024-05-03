@@ -222,7 +222,7 @@ function gen_webpage(req, page) {
     if (urlbar.query.edit || urlbar.query.create || urlbar.query.delete) {
       payload += `${data.final}`;
     } else {
-      payload += `${data.schemas}${data.tables}${data.final}`;
+      payload += `${data.schemas}${data.tables}${data.final}<a class="logout" href="/logout">Logout</a>`;
     }
     page.send(payload);
     page.end();
@@ -344,6 +344,12 @@ app.post("/delete_record", function (request, response) {
     }
   );
 });
+app.get("/logout", function (request, response) {
+  if (request.session.loggedin) {
+    request.session.loggedin = false;
+  }
+  response.redirect('/')
+})
 const httpServer = http.createServer(app);
 httpServer.listen(8080, () => {
   console.log("HTTP Server running on port 80");
