@@ -307,31 +307,19 @@ httpServer.listen(8080, () => {
   console.log("HTTP Server running on port 80");
 });
 
-secured = true;
 try {
-  const privateKey = fs.readFileSync(
-    "/etc/letsencrypt/live/db.jmtntbang.com/privkey.pem",
-    "utf8"
-  );
-  const certificate = fs.readFileSync(
-    "/etc/letsencrypt/live/db.jmtntbang.com/cert.pem",
-    "utf8"
-  );
-  const ca = fs.readFileSync(
-    "/etc/letsencrypt/live/db.jmtntbang.com/chain.pem",
-    "utf8"
-  );
-
-  const credentials = {
-    key: privateKey,
-    cert: certificate,
-    ca: ca,
-  };
-
-  const httpsServer = https.createServer(credentials, app);
-  httpsServer.listen(443, () => {
-    console.log("HTTPS Server running on port 443");
-  });
+  https
+    .createServer(
+      {
+        key: fs.readFileSync(`${config.ssl}/privkey.pem`, "utf8"),
+        cert: fs.readFileSync(`${config.ssl}/cert.pem`, "utf8"),
+        ca: fs.readFileSync(`${config.ssl}/chain.pem`, "utf8"),
+      },
+      app
+    )
+    .listen(443, () => {
+      console.log("HTTPS Server running on port 443");
+    });
 } catch {
-  secured = false;
+  console.log("Caution: Connections will not be secured")
 }
