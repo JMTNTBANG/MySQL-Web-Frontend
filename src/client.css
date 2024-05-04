@@ -10,3 +10,16 @@ td {
   background-color: white;
   border-collapse: collapse;
 }
+
+.search {
+  position: absolute;
+  right: 10px;
+  top: 110px;
+  
+}
+
+.logout {
+  position: absolute;
+  right: 10px;
+  top: 10px;
+}

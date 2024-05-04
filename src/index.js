@@ -137,18 +137,60 @@ function gen_webpage(req, page) {
                 } else {
                   final +=
                     '<table style="width:100%;"><tr><th><a onclick="record_create()" style="color: blue; cursor: pointer">Create</a></th>';
+                  let searchbar = '<div class="search"><form onsubmit="search_table(); return false;"><select id="search-column">'
                   for (column of fields) {
-                    final += `<th>${column.name}</th>`;
+                    searchbar += `<option value="${column.name}">${column.name}</option>`
+                    if (urlbar.query.sortBy == column.name) {
+                      if (urlbar.query.reversed == "false") {
+                        final += `<th><a onclick="sort_by_column('${column.name}')" style="color: blue; cursor: pointer">${column.name}</a></th>`;
+                      } else {
+                        final += `<th><a onclick="sort_by_column('${column.name}')" style="color: red; cursor: pointer">${column.name}</a></th>`;
+                      }
+                    } else {
+                      final += `<th><a onclick="sort_by_column('${column.name}')" style="cursor: pointer">${column.name}</a></th>`;
+                    }
                   }
+                  searchbar += '</select> <input type="text" name="Search" id="searchbar"> <input type="submit" value="Search"></div>'
                   final += `</tr>`;
+                  if (urlbar.query.sortBy) {
+                    if (urlbar.query.reversed == "false") {
+                      result.sort((a, b) => {
+                        if (a[urlbar.query.sortBy] > b[urlbar.query.sortBy]) {
+                          return 1;
+                        } else if (
+                          a[urlbar.query.sortBy] < b[urlbar.query.sortBy]
+                        ) {
+                          return -1;
+                        }
+                        return 0;
+                      });
+                    } else {
+                      result.sort((a, b) => {
+                        if (a[urlbar.query.sortBy] < b[urlbar.query.sortBy]) {
+                          return 1;
+                        } else if (
+                          a[urlbar.query.sortBy] > b[urlbar.query.sortBy]
+                        ) {
+                          return -1;
+                        }
+                        return 0;
+                      });
+                    }
+                  }
                   for (row of result) {
+                    if (urlbar.query.searchCol && urlbar.query.searchQuery) {
+                        if (!row[urlbar.query.searchCol]) continue;
+                        else if (format(row[urlbar.query.searchCol]).toString().includes(urlbar.query.searchQuery)) {
+
+                        } else continue;
+                    }
                     final += `<tr><td><a onclick="record_edit(${row["ID"]})" style="color: blue; cursor: pointer">Edit</a> <a onclick="record_delete(${row["ID"]})" style="color: red; cursor: pointer">Delete</a></td>`;
                     for (value in row) {
                       final += `<td>${format(row[value])}</td>`;
                     }
                     final += `</tr>`;
                   }
-                  final += `</table>`;
+                  final += `</table>${searchbar}`;
                 }
               }
               callback({ schemas: schemas, tables: tables, final: final });
@@ -180,7 +222,7 @@ function gen_webpage(req, page) {
     if (urlbar.query.edit || urlbar.query.create || urlbar.query.delete) {
       payload += `${data.final}`;
     } else {
-      payload += `${data.schemas}${data.tables}${data.final}`;
+      payload += `${data.schemas}${data.tables}${data.final}<a class="logout" href="/logout">Logout</a>`;
     }
     page.send(payload);
     page.end();
@@ -302,36 +344,30 @@ app.post("/delete_record", function (request, response) {
     }
   );
 });
+app.get("/logout", function (request, response) {
+  if (request.session.loggedin) {
+    request.session.loggedin = false;
+  }
+  response.redirect('/')
+})
 const httpServer = http.createServer(app);
 httpServer.listen(8080, () => {
   console.log("HTTP Server running on port 80");
 });
 
-secured = true;
 try {
-  const privateKey = fs.readFileSync(
-    "/etc/letsencrypt/live/db.jmtntbang.com/privkey.pem",
-    "utf8"
-  );
-  const certificate = fs.readFileSync(
-    "/etc/letsencrypt/live/db.jmtntbang.com/cert.pem",
-    "utf8"
-  );
-  const ca = fs.readFileSync(
-    "/etc/letsencrypt/live/db.jmtntbang.com/chain.pem",
-    "utf8"
-  );
-
-  const credentials = {
-    key: privateKey,
-    cert: certificate,
-    ca: ca,
-  };
-
-  const httpsServer = https.createServer(credentials, app);
-  httpsServer.listen(443, () => {
-    console.log("HTTPS Server running on port 443");
-  });
+  https
+    .createServer(
+      {
+        key: fs.readFileSync(`${config.ssl}/privkey.pem`, "utf8"),
+        cert: fs.readFileSync(`${config.ssl}/cert.pem`, "utf8"),
+        ca: fs.readFileSync(`${config.ssl}/chain.pem`, "utf8"),
+      },
+      app
+    )
+    .listen(443, () => {
+      console.log("HTTPS Server running on port 443");
+    });
 } catch {
-  secured = false;
+  console.log("Caution: Connections will not be secured");
 }
