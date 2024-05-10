@@ -31,6 +31,19 @@ function format(value) {
   return newValue;
 }
 
+function validate_auth_schema(callback) {
+  database.query("SHOW SCHEMAS", function (err, result, fields) {
+    if (err) throw err;
+    let auth = false;
+    for (schema of result) {
+      if (schema.Database == "auth") {
+        auth = true;
+      }
+    }
+    callback(auth);
+  });
+}
+
 function gen_webpage(req, page) {
   const urlbar = url.parse(req.url, true);
   function get_db_data(callback) {
@@ -239,7 +252,14 @@ app.get("/", function (request, response) {
   if (request.session.loggedin) {
     gen_webpage(request, response);
   } else {
-    response.sendFile(path.join(__dirname + "/login.html"));
+    function callback(valid) {
+      if (valid) {
+        response.sendFile(path.join(__dirname + "/login.html"));
+      } else {
+        response.sendFile(path.join(__dirname + "/register.html"));
+      }
+    }
+    validate_auth_schema(callback);
   }
 });
 app.post("/auth", function (request, response) {
@@ -253,8 +273,12 @@ app.post("/auth", function (request, response) {
     database.query(
       "SELECT * FROM auth.accounts WHERE username = ? AND password = ?",
       [username, password],
-      function (error, results, fields) {
-        if (error) throw error;
+      function (err, results, fields) {
+        if (err) {
+          response.send(`<script>alert("${err}"); history.back();</script>`);
+          response.end();
+          return;
+        }
         if (results.length > 0) {
           request.session.loggedin = true;
           request.session.username = username;
@@ -264,6 +288,44 @@ app.post("/auth", function (request, response) {
       }
     );
   }
+});
+app.post("/register", function (request, response) {
+  function callback(valid) {
+    if (valid) return;
+    let username = request.body.username;
+    let password = request.body.password;
+    database.query("CREATE SCHEMA auth;", function (err, result) {
+      if (err) {
+        response.send(`<script>alert("${err}"); history.back();</script>`);
+        response.end();
+        return;
+      }
+      database.query(
+        "CREATE TABLE auth.accounts (`ID` INT NOT NULL AUTO_INCREMENT, `username` VARCHAR(50) NOT NULL, `password` VARCHAR(255) NOT NULL, `createdDate` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY (`ID`));",
+        function (err, result) {
+          if (err) {
+            response.send(`<script>alert("${err}"); history.back();</script>`);
+            response.end();
+            return;
+          }
+          database.query(
+            `INSERT INTO auth.accounts (\`username\`, \`password\`) VALUES ('${username}', '${password}');`,
+            function (err, result) {
+              if (err) {
+                response.send(
+                  `<script>alert("${err}"); history.back();</script>`
+                );
+                response.end();
+                return;
+              }
+              response.redirect("/");
+            }
+          );
+        }
+      );
+    });
+  }
+  validate_auth_schema(callback);
 });
 app.post("/save_record", function (request, response) {
   const record_information = url.parse(request.rawHeaders[33], true).query;

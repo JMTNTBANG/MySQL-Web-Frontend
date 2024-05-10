@@ -1,4 +1,4 @@
-# MySQL Web Frontend
+# MySQL Web Frontend v1.0.1b1
 A Web Interface for a MySQL Server
 
 ## Setup
@@ -29,33 +29,17 @@ A Web Interface for a MySQL Server
 
 `auth.password`: The Password to access your MySQL Server
 
-**Make sure the MySQL User has at least `ALTER`, `CREATE`, `DELETE`, `INSERT`, `SELECT`, and `UPDATE` privileges to the Databases you want accessible through the web interface**
+**Make sure the MySQL User has at least `ALTER`, `CREATE`, `DELETE`, `INSERT`, `SELECT`, and `UPDATE` privileges to the Databases you want accessible through the web interface, as well as the `auth` Database**
 
 ***Also Ensure that each database has a Primary Key Column named ID or most of the features will not work***
 
-### Logging into the Web Interface
-Send the follwing queries to your MySQL Database:
-```sql
-CREATE SCHEMA `auth`;
-```
-```sql
-CREATE TABLE `auth`.`accounts` (
-  `ID` INT NOT NULL,
-  `username` VARCHAR(50) NOT NULL,
-  `password` VARCHAR(255) NOT NULL,
-  `createdDate` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  PRIMARY KEY (`id`));
-```
-You can use this next command as many times as you want for the amount of users you would like to have
-```sql
-INSERT INTO `auth`.`accounts` (`username`, `password`)
-    VALUES (
-        '[USERNAME YOU WANT TO USE]',
-        '[PASSWORD YOU WANT TO USE]');
-```
-**Make sure the MySQL User has at least `SELECT` privileges for the `auth` Database**
-
 ## Using The Web Interface
+
+### Registering Your First User
+
+After setting up the Web-Interface for the first time, you will need to create a User Account, This will be the Login info you will use to log into the database. After hitting Register, the App will create a Schema named `auth` with a table named `accounts` on your database where all user accounts will be stored. You can add more later on.
+
+![Web Interface Regester Page](images/register.png)
 
 ### Logging in
 
