@@ -44,6 +44,52 @@ function validate_auth_schema(callback) {
   });
 }
 
+function validate_history_schema(callback, table = null, columns = null) {
+  function create(skip_db = false) {
+    function create_table() {
+      database.query(
+        `CREATE TABLE history.${table} (${columns});`,
+        function (err, result) {
+          if (err) throw err;
+          callback();
+        }
+      );
+    }
+    if (!skip_db) {
+      database.query("CREATE SCHEMA history;", function (err, result) {
+        if (err) throw err;
+        create_table();
+      });
+    } else create_table();
+  }
+  database.query("SHOW SCHEMAS", function (err, result, fields) {
+    if (err) throw err;
+    let history = false;
+    for (schema of result) {
+      if (schema.Database == "history") {
+        history = true;
+      }
+    }
+    if (!history) create();
+    else
+      database.query(
+        `SHOW TABLES FROM history`,
+        function (err, result, fields) {
+          if (err) throw err;
+          let tbl = false;
+          for (table2 of result) {
+            if (table2.Tables_in_history == table) {
+              tbl = true;
+            }
+          }
+          if (!tbl) create(true);
+          else callback();
+          return;
+        }
+      );
+  });
+}
+
 function gen_webpage(req, page) {
   const urlbar = url.parse(req.url, true);
   function get_db_data(callback) {
@@ -257,45 +303,59 @@ app.get("/", function (request, response) {
   if (request.session.loggedin) {
     gen_webpage(request, response);
   } else {
-    function callback(valid) {
+    function if_auth(valid) {
       if (valid) {
         response.sendFile(path.join(__dirname + "/login.html"));
       } else {
         response.sendFile(path.join(__dirname + "/register.html"));
       }
     }
-    validate_auth_schema(callback);
+    validate_auth_schema(if_auth);
   }
 });
 app.post("/auth", function (request, response) {
-  let username = request.body.username;
-  let password = request.body.password;
-  let previous_query = url.parse(request.rawHeaders[33], true).search;
-  if (previous_query == null) {
-    previous_query = "";
-  }
-  if (username && password) {
-    database.query(
-      "SELECT * FROM auth.accounts WHERE username = ? AND password = ?",
-      [username, password],
-      function (err, results, fields) {
-        if (err) {
-          response.send(`<script>alert("${err}"); history.back();</script>`);
+  function callback() {
+    let username = request.body.username;
+    let password = request.body.password;
+    let previous_query = url.parse(request.rawHeaders[33], true).search;
+    if (previous_query == null) {
+      previous_query = "";
+    }
+    if (username && password) {
+      database.query(
+        "SELECT * FROM auth.accounts WHERE username = ? AND password = ?",
+        [username, password],
+        function (err, results, fields) {
+          if (err) {
+            response.send(`<script>alert("${err}"); history.back();</script>`);
+            response.end();
+            return;
+          }
+          if (results.length > 0) {
+            request.session.loggedin = true;
+            request.session.username = username;
+            request.session.userid = results[0].ID;
+            database.query(
+              `INSERT INTO history.logins (\`accountID\`, \`username\`, \`ip\`, \`type\`) VALUES ('${results[0].ID}', '${username}', '${request.ip}', 'LOGIN');`,
+              function (err, result) {
+                if (err) throw err;
+              }
+            );
+          }
+          response.redirect(`/${previous_query}`);
           response.end();
-          return;
         }
-        if (results.length > 0) {
-          request.session.loggedin = true;
-          request.session.username = username;
-        }
-        response.redirect(`/${previous_query}`);
-        response.end();
-      }
-    );
+      );
+    }
   }
+  validate_history_schema(
+    callback,
+    "logins",
+    "`ID` INT NOT NULL AUTO_INCREMENT, `accountID` INT NOT NULL, `username` VARCHAR(255) NULL, `ip` VARCHAR(255) NOT NULL, `type` VARCHAR(255) NOT NULL, `timestamp` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY (`ID`)"
+  );
 });
 app.post("/register", function (request, response) {
-  function callback(valid) {
+  function if_auth(valid) {
     if (valid) return;
     let username = request.body.username;
     let password = request.body.password;
@@ -330,111 +390,196 @@ app.post("/register", function (request, response) {
       );
     });
   }
-  validate_auth_schema(callback);
+  validate_auth_schema(if_auth);
 });
+app.use(session({ secret: "secret", resave: true, saveUninitialized: true }));
 app.post("/save_record", function (request, response) {
-  const record_information = url.parse(request.rawHeaders[33], true).query;
-  const record_data = request.body;
-  let changes = "";
-  if (record_information.edit) {
-    changes = `UPDATE ${record_information.db}.${record_information.table} SET `;
-    let first = true;
-    for (column in record_data) {
-      let text = `'${record_data[column]}'`;
-      if (text == "'null'") {
-        text = "null";
-      }
-      if (first) {
-        changes += `\`${column}\` = ${text}`;
-        first = false;
-      } else {
-        changes += `, \`${column}\` = ${text}`;
-      }
-    }
-    changes += ` WHERE (\`ID\` = '${record_information.edit}');`;
-  } else if (record_information.create) {
-    let columns = "";
-    let values = "";
-    let first = true;
-    for (column in record_data) {
-      let text = `'${record_data[column]}'`;
-      if (text == "'null'") {
-        text = "null";
-      }
-      if (text != "''") {
+  function callback() {
+    let type;
+    const record_information = url.parse(request.rawHeaders[33], true).query;
+    const record_data = request.body;
+    let changes = "";
+    if (record_information.edit) {
+      type = "EDIT";
+      changes = `UPDATE ${record_information.db}.${record_information.table} SET `;
+      let first = true;
+      for (column in record_data) {
+        let text = `'${record_data[column]}'`;
+        if (text == "'null'") {
+          text = "null";
+        }
         if (first) {
-          columns += `\`${column}\``;
-          values += `${text}`;
+          changes += `\`${column}\` = ${text}`;
           first = false;
         } else {
-          columns += `, \`${column}\``;
-          values += `, ${text}`;
+          changes += `, \`${column}\` = ${text}`;
         }
       }
-      changes = `INSERT INTO ${record_information.db}.${record_information.table} (${columns}) VALUES (${values});`;
+      changes += ` WHERE (\`ID\` = '${record_information.edit}');`;
+    } else if (record_information.create) {
+      type = "CREATE";
+      let columns = "";
+      let values = "";
+      let first = true;
+      for (column in record_data) {
+        let text = `'${record_data[column]}'`;
+        if (text == "'null'") {
+          text = "null";
+        }
+        if (text != "''") {
+          if (first) {
+            columns += `\`${column}\``;
+            values += `${text}`;
+            first = false;
+          } else {
+            columns += `, \`${column}\``;
+            values += `, ${text}`;
+          }
+        }
+        changes = `INSERT INTO ${record_information.db}.${record_information.table} (${columns}) VALUES (${values});`;
+      }
     }
-  }
-  database.query(changes, function (err, result, fields) {
-    if (err) {
-      response.send(`<script>alert("${err}"); history.back();</script>`);
-      response.end();
-      return;
-    }
-    response.redirect(
-      `/?db=${record_information.db}&table=${record_information.table}`
-    );
-    response.end();
-  });
-});
-app.post("/delete_record", function (request, response) {
-  const record_information = url.parse(request.rawHeaders[33], true).query;
-  const record_data = request.body;
-  if (record_data.ID != record_information.delete) {
-    response.send(
-      `<script>alert("You did not enter the correct ID"); history.back();</script>`
-    );
-    response.end();
-    return;
-  }
-  database.query(
-    `DELETE FROM ${record_information.db}.${record_information.table} WHERE ID='${record_information.delete}'`,
-    function (err, result) {
-      let final = `<title>Deletion Successful</title><script>${client_script}</script><style>${client_styles}</style>`;
+    database.query(changes, function (err, result, fields) {
       if (err) {
         response.send(`<script>alert("${err}"); history.back();</script>`);
         response.end();
         return;
       }
-      final += `<h2>Successfully Deleted ID ${record_information.delete}</h2><form onsubmit="location.href = '/?db=${record_information.db}&table=${record_information.table}'; return false;"><input type="submit" value="Go Back"></form>`;
-      response.send(final);
+      let recordId = record_information.edit;
+      if (result.insertId > 0) recordId = result.insertId;
+      database.query(
+        `INSERT INTO history.record_changes (\`accountID\`, \`username\`, \`type\`, \`recordID\`, \`ip\`, \`table\`, \`newData\`) VALUES ('${
+          request.session.userid
+        }', '${request.session.username}', '${type}', '${recordId}', '${
+          request.ip
+        }', '${record_information.db}.${
+          record_information.table
+        }', '${JSON.stringify(record_data)}');`,
+        function (err, results) {
+          if (err) throw err;
+          response.redirect(
+            `/?db=${record_information.db}&table=${record_information.table}`
+          );
+          response.end();
+        }
+      );
+    });
+  }
+  validate_history_schema(
+    callback,
+    "record_changes",
+    "`ID` INT NOT NULL AUTO_INCREMENT, `accountID` INT NOT NULL, `username` VARCHAR(255) NOT NULL, `type` VARCHAR(255) NOT NULL, `recordID` INT NOT NULL, `ip` VARCHAR(255) NOT NULL, `table` VARCHAR(255) NOT NULL, `newData` JSON NOT NULL, `timestamp` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY (`ID`)"
+  );
+});
+app.post("/delete_record", function (request, response) {
+  function callback() {
+    const record_information = url.parse(request.rawHeaders[33], true).query;
+    const record_data = request.body;
+    if (record_data.ID != record_information.delete) {
+      response.send(
+        `<script>alert("You did not enter the correct ID"); history.back();</script>`
+      );
       response.end();
+      return;
     }
+    database.query(
+      `SELECT * FROM ${record_information.db}.${record_information.table} WHERE ID='${record_information.delete}'`,
+      function (err, dataresult, datafields) {
+        if (err) {
+          response.send(`<script>alert("${err}"); history.back();</script>`);
+          response.end();
+          return;
+        }
+        database.query(
+          `DELETE FROM ${record_information.db}.${record_information.table} WHERE ID='${record_information.delete}'`,
+          function (err, result) {
+            let final = `<title>Deletion Successful</title><script>${client_script}</script><style>${client_styles}</style>`;
+            if (err) {
+              response.send(
+                `<script>alert("${err}"); history.back();</script>`
+              );
+              response.end();
+              return;
+            }
+            database.query(
+              `INSERT INTO history.record_changes (\`accountID\`, \`username\`, \`type\`, \`recordID\`, \`ip\`, \`table\`, \`newData\`) VALUES ('${
+                request.session.userid
+              }', '${request.session.username}', 'DELETE', '${
+                dataresult[0].ID
+              }', '${request.ip}', '${record_information.db}.${
+                record_information.table
+              }', '${JSON.stringify(dataresult[0])}');`,
+              function (err, results) {
+                if (err) throw err;
+                final += `<h2>Successfully Deleted ID ${record_information.delete}</h2><form onsubmit="location.href = '/?db=${record_information.db}&table=${record_information.table}'; return false;"><input type="submit" value="Go Back"></form>`;
+                response.send(final);
+                response.end();
+              }
+            );
+          }
+        );
+      }
+    );
+  }
+  validate_history_schema(
+    callback,
+    "record_changes",
+    "`ID` INT NOT NULL AUTO_INCREMENT, `accountID` INT NOT NULL, `username` VARCHAR(255) NOT NULL, `type` VARCHAR(255) NOT NULL, `recordID` INT NOT NULL, `ip` VARCHAR(255) NOT NULL, `table` VARCHAR(255) NOT NULL, `newData` JSON NOT NULL, `timestamp` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY (`ID`)"
   );
 });
 app.get("/logout", function (request, response) {
-  if (request.session.loggedin) {
-    request.session.loggedin = false;
+  function callback() {
+    if (request.session.loggedin) {
+      request.session.loggedin = false;
+    }
+    database.query(
+      `INSERT INTO history.logins (\`accountID\`, \`username\`, \`ip\`, \`type\`) VALUES ('${request.session.userid}', '${request.session.username}', '${request.ip}', 'LOGOUT');`,
+      function (err, result) {
+        if (err) throw err;
+      }
+    );
+    response.redirect("/");
   }
-  response.redirect("/");
-});
-const httpServer = http.createServer(app);
-httpServer.listen(8080, () => {
-  console.log("HTTP Server running on port 80");
+  validate_history_schema(
+    callback,
+    "logins",
+    "`ID` INT NOT NULL AUTO_INCREMENT, `accountID` INT NOT NULL, `username` VARCHAR(255) NULL, `ip` VARCHAR(255) NOT NULL, `type` VARCHAR(255) NOT NULL, `timestamp` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY (`ID`)"
+  );
 });
 
-try {
-  https
-    .createServer(
-      {
-        key: fs.readFileSync(`${config.ssl}/privkey.pem`, "utf8"),
-        cert: fs.readFileSync(`${config.ssl}/cert.pem`, "utf8"),
-        ca: fs.readFileSync(`${config.ssl}/chain.pem`, "utf8"),
-      },
-      app
-    )
-    .listen(443, () => {
-      console.log("HTTPS Server running on port 443");
-    });
-} catch {
-  console.log("Caution: Connections will not be secured");
+function start_server() {
+  let ports = "";
+  try {
+    https
+      .createServer(
+        {
+          key: fs.readFileSync(`${config.ssl}/privkey.pem`, "utf8"),
+          cert: fs.readFileSync(`${config.ssl}/cert.pem`, "utf8"),
+          ca: fs.readFileSync(`${config.ssl}/chain.pem`, "utf8"),
+        },
+        app
+      )
+      .listen(443, () => {
+        console.log("HTTPS Server running on port 443");
+      });
+      ports += '443, '
+  } catch {
+    console.log("Caution: Connections will not be secured");
+  }
+  const httpServer = http.createServer(app);
+  httpServer.listen(8080, () => {
+    console.log("HTTP Server running on port 8080");
+  });
+  ports += '8080'
+  database.query(
+    `INSERT INTO history.startupLog (\`ports\`) VALUES ('${ports}');`,
+    function (err, result) {
+      if (err) throw err;
+    }
+  );
 }
+validate_history_schema(
+  start_server,
+  "startupLog",
+  "`ID` INT NOT NULL AUTO_INCREMENT, `ports` VARCHAR(255) NOT NULL, `timestamp` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY (`ID`)"
+);
