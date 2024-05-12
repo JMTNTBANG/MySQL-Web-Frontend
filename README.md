@@ -98,7 +98,7 @@ After hitting delete the record will no longer be shown and you will be returned
 Upon doing one of 3 Actions on the Web Interface, a Database named `history` will be created, along with 3 different log tables that are created when needed:
 1. Booting Up The Server (`serverLog` table) (Logs the Accessible Ports (Usually 8080 for unsecure and 443 for secure))
 2. Logging in/Logging Out of the Interface (`logins` table) (Logs the Account ID, Username, IP Address, and the Type (Logging in or Out))
-3. Creating, Modifying, or Deleting Entries in a table (`record_changes` table) (Logs the Account ID, Username, Type (Create, Edit, or Delete) IP Address, Table, and the Record Data in JSON Format)
+3. Creating, Modifying, or Deleting Entries in a table (`record_changes` table) (Logs the Account ID, Username, Type (Create, Edit, or Delete), IP Address, Table, and the Record Data in JSON Format)
 
 Everytime one of those actions are done, a new entry is created in its respective table, creating an "Activity Log" if you will.
 
