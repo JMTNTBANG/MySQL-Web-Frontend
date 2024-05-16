@@ -1,4 +1,4 @@
-# MySQL Web Frontend
+# MySQL Web Frontend v1.0.1
 A Web Interface for a MySQL Server
 
 ## Setup
@@ -29,33 +29,17 @@ A Web Interface for a MySQL Server
 
 `auth.password`: The Password to access your MySQL Server
 
-**Make sure the MySQL User has at least `ALTER`, `CREATE`, `DELETE`, `INSERT`, `SELECT`, and `UPDATE` privileges to the Databases you want accessible through the web interface**
+**Make sure the MySQL User has at least `ALTER`, `CREATE`, `DELETE`, `INSERT`, `SELECT`, and `UPDATE` privileges to all Databases**
 
 ***Also Ensure that each database has a Primary Key Column named ID or most of the features will not work***
 
-### Logging into the Web Interface
-Send the follwing queries to your MySQL Database:
-```sql
-CREATE SCHEMA `auth`;
-```
-```sql
-CREATE TABLE `auth`.`accounts` (
-  `ID` INT NOT NULL,
-  `username` VARCHAR(50) NOT NULL,
-  `password` VARCHAR(255) NOT NULL,
-  `createdDate` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  PRIMARY KEY (`id`));
-```
-You can use this next command as many times as you want for the amount of users you would like to have
-```sql
-INSERT INTO `auth`.`accounts` (`username`, `password`)
-    VALUES (
-        '[USERNAME YOU WANT TO USE]',
-        '[PASSWORD YOU WANT TO USE]');
-```
-**Make sure the MySQL User has at least `SELECT` privileges for the `auth` Database**
-
 ## Using The Web Interface
+
+### Registering Your First User
+
+After setting up the Web-Interface for the first time, you will need to create a User Account, This will be the Login info you will use to log into the database. After hitting Register, the App will create a Schema named `auth` with a table named `accounts` on your database where all user accounts will be stored. You can add more later on.
+
+![Web Interface Regester Page](images/register.png)
 
 ### Logging in
 
@@ -108,4 +92,19 @@ Hitting Cancel wont do anything, hitting Okay will send you to another page wher
 ![Delete Page](images/delete-page.png)
 
 After hitting delete the record will no longer be shown and you will be returned to the table screen
+
+### Accessing Logs
+
+Upon doing one of 3 Actions on the Web Interface, a Database named `history` will be created, along with 3 different log tables that are created when needed:
+1. Booting Up The Server (`serverLog` table) (Logs the Accessible Ports (Usually 8080 for unsecure and 443 for secure))
+2. Logging in/Logging Out of the Interface (`logins` table) (Logs the Account ID, Username, IP Address, and the Type (Logging in or Out))
+3. Creating, Modifying, or Deleting Entries in a table (`record_changes` table) (Logs the Account ID, Username, Type (Create, Edit, or Delete), IP Address, Table, and the Record Data in JSON Format)
+
+Everytime one of those actions are done, a new entry is created in its respective table, creating an "Activity Log" if you will.
+
+### Setting Permissions
+
+By Default, Users who do not have the `admin` flag, will have all Schemas and Tables hidden. To Add access to Schemas and tables, you must go to the `permissions` table in the `auth` Database, there you can define what Users (Defined in `userID` column) can do what (Defined in `canView`, `canCreate`, `canEdit`, and `canDelete` columns with a 0 or 1 for false or true respectively) to each schema and table (Defined in `schema` and `table` column, use `*` to choose all tables in a schema)
+
+![Permissions Table](images/permissions.png)
 
