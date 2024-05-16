@@ -1,4 +1,4 @@
-# MySQL Web Frontend v1.0.1b3
+# MySQL Web Frontend v1.0.1
 A Web Interface for a MySQL Server
 
 ## Setup
@@ -101,4 +101,10 @@ Upon doing one of 3 Actions on the Web Interface, a Database named `history` wil
 3. Creating, Modifying, or Deleting Entries in a table (`record_changes` table) (Logs the Account ID, Username, Type (Create, Edit, or Delete), IP Address, Table, and the Record Data in JSON Format)
 
 Everytime one of those actions are done, a new entry is created in its respective table, creating an "Activity Log" if you will.
+
+### Setting Permissions
+
+By Default, Users who do not have the `admin` flag, will have all Schemas and Tables hidden. To Add access to Schemas and tables, you must go to the `permissions` table in the `auth` Database, there you can define what Users (Defined in `userID` column) can do what (Defined in `canView`, `canCreate`, `canEdit`, and `canDelete` columns with a 0 or 1 for false or true respectively) to each schema and table (Defined in `schema` and `table` column, use `*` to choose all tables in a schema)
+
+![Permissions Table](images/permissions.png)
 
