@@ -1,6 +1,7 @@
 const mysql = require("mysql");
 const url = require("url");
 const config = require("./config.json");
+const static_tables = require("./staticTables.json");
 const fs = require("fs");
 const express = require("express");
 const session = require("express-session");
@@ -44,11 +45,14 @@ function validate_auth_schema(callback) {
   });
 }
 
-function validate_history_schema(callback, table = null, columns = null) {
+function validate_mysql_obj(
+  callback,
+  data = { schema: "", table: "", columns: "" }
+) {
   function create(skip_db = false) {
     function create_table() {
       database.query(
-        `CREATE TABLE history.${table} (${columns});`,
+        `CREATE TABLE ${data.schema}.${data.table} (${data.columns});`,
         function (err, result) {
           if (err) throw err;
           callback();
@@ -56,7 +60,7 @@ function validate_history_schema(callback, table = null, columns = null) {
       );
     }
     if (!skip_db) {
-      database.query("CREATE SCHEMA history;", function (err, result) {
+      database.query(`CREATE SCHEMA ${data.schema};`, function (err, result) {
         if (err) throw err;
         create_table();
       });
@@ -64,25 +68,25 @@ function validate_history_schema(callback, table = null, columns = null) {
   }
   database.query("SHOW SCHEMAS", function (err, result, fields) {
     if (err) throw err;
-    let history = false;
-    for (schema of result) {
-      if (schema.Database == "history") {
-        history = true;
+    let schema_exists = false;
+    for (schemas of result) {
+      if (schemas.Database == data.schema) {
+        schema_exists = true;
       }
     }
-    if (!history) create();
+    if (!schema_exists) create();
     else
       database.query(
-        `SHOW TABLES FROM history`,
+        `SHOW TABLES FROM ${data.schema}`,
         function (err, result, fields) {
           if (err) throw err;
-          let tbl = false;
-          for (table2 of result) {
-            if (table2.Tables_in_history == table) {
-              tbl = true;
+          let table_exists = false;
+          for (tables of result) {
+            if (tables[`Tables_in_${data.schema}`] == data.table) {
+              table_exists = true;
             }
           }
-          if (!tbl) create(true);
+          if (!table_exists) create(true);
           else callback();
           return;
         }
@@ -93,176 +97,265 @@ function validate_history_schema(callback, table = null, columns = null) {
 function gen_webpage(req, page) {
   const urlbar = url.parse(req.url, true);
   function get_db_data(callback) {
-    database.query("SHOW SCHEMAS", function (err, result, fields) {
-      let schemas = "";
-      if (err) {
-        page.send(`<script>alert("${err}"); history.back();</script>`);
-        page.end();
-        return;
-      }
-      schemas +=
-        '<form onsubmit="db_submit(); return false;"><label for="db-sel">Database:</label> <select id="db-sel">';
-      for (schema of result) {
-        schemas += "<option";
-        if (schema.Database == urlbar.query.db) schemas += " selected";
-        schemas += ` value="${schema.Database}">${schema.Database}</option>`;
-      }
-      schemas += '</select> <input type="submit" value="Submit"></form>';
-      database.query(
-        `SHOW TABLES FROM ${urlbar.query.db}`,
-        function (err, result, fields) {
-          let tables = "";
-          if (urlbar.query.db) {
-            if (err) {
-              page.send(`<script>alert("${err}"); history.back();</script>`);
-              page.end();
-              return;
-            }
-            tables +=
-              '<form onsubmit="table_submit(); return false;"><label for="tabel-sel">Tables:</label> <select id="table-sel">';
-            for (table of result) {
-              tables += `<option`;
-              if (table[`Tables_in_${urlbar.query.db}`] == urlbar.query.table)
-                tables += " selected";
-              tables += `>${table[`Tables_in_${urlbar.query.db}`]}</option>`;
-            }
-            tables += '</select> <input type="submit" value="Submit"></form>';
-          }
-          database.query(
-            `SELECT * FROM ${urlbar.query.db}.${urlbar.query.table}`,
-            function (err, result, fields) {
-              let final = "";
-              if (urlbar.query.db && urlbar.query.table) {
-                if (err) {
-                  page.send(
-                    `<script>alert("${err}"); history.back();</script>`
-                  );
-                  page.end();
-                  return;
+    database.query(
+      `SELECT * FROM auth.permissions WHERE userId = ${req.session.userid}`,
+      (err, permissions, x) => {
+        if (err) throw err;
+        database.query(
+          `SELECT * FROM auth.accounts WHERE ID = ${req.session.userid}`,
+          (err, account, x) => {
+            if (err) throw err;
+            function permissionsFor(user, schema, table = undefined) {
+              for (permission of user.permissions) {
+                if (permission.schema == schema) {
+                  if (!table || permission.table == table || permission.table == '*') {
+                    return {
+                      canView: permission.canView,
+                      canCreate: permission.canCreate,
+                      canEdit: permission.canEdit,
+                      canDelete: permission.canDelete,
+                    };
+                  } else continue;
                 }
-                let exists = false;
-                if (urlbar.query.edit) {
-                  final += `<form action="/save_record" method="post"><input type="submit" value="Save">`;
-                  let columns = [];
-                  let rows = [];
-                  for (column of fields) {
-                    columns.push(
-                      `<label for="${column.name}">${column.name}: </label>`
-                    );
-                    for (row of result) {
-                      if (row["ID"] == urlbar.query.edit) {
-                        exists = true;
-                      }
-                    }
-                    if (!exists) {
+                else continue;
+              }
+              if (user.admin == 1)
+                return {
+                  canView: 1,
+                  canCreate: 1,
+                  canEdit: 1,
+                  canDelete: 1,
+                };
+              return null;
+            }
+            account = account[0];
+            account.permissions = permissions;
+            database.query("SHOW SCHEMAS", function (err, result, fields) {
+              let schemas = "";
+              if (err) {
+                page.send(`<script>alert("${err}"); history.back();</script>`);
+                page.end();
+                return;
+              }
+              schemas +=
+                '<form onsubmit="db_submit(); return false;"><label for="db-sel">Database:</label> <select id="db-sel">';
+              for (schema of result) {
+                const permissions = permissionsFor(account, schema.Database);
+                if (!permissions || permissions.canView == 0) continue;
+                schemas += "<option";
+                if (schema.Database == urlbar.query.db) schemas += " selected";
+                schemas += ` value="${schema.Database}">${schema.Database}</option>`;
+              }
+              schemas +=
+                '</select> <input type="submit" value="Submit"></form>';
+              database.query(
+                `SHOW TABLES FROM ${urlbar.query.db}`,
+                function (err, result, fields) {
+                  let tables = "";
+                  if (urlbar.query.db) {
+                    if (err) {
                       page.send(
-                        `<script>alert("Record Does not Exist in Table"); history.back();</script>`
+                        `<script>alert("${err}"); history.back();</script>`
                       );
                       page.end();
                       return;
                     }
+                    tables +=
+                      '<form onsubmit="table_submit(); return false;"><label for="tabel-sel">Tables:</label> <select id="table-sel">';
+                    for (table of result) {
+                      const permissions = permissionsFor(account, urlbar.query.db, table[`Tables_in_${urlbar.query.db}`]);
+                      if (!permissions || permissions.canView == 0) continue;
+                      tables += `<option`;
+                      if (
+                        table[`Tables_in_${urlbar.query.db}`] ==
+                        urlbar.query.table
+                      )
+                        tables += " selected";
+                      tables += `>${
+                        table[`Tables_in_${urlbar.query.db}`]
+                      }</option>`;
+                    }
+                    tables +=
+                      '</select> <input type="submit" value="Submit"></form>';
                   }
-                  for (row of result) {
-                    if (row["ID"] == urlbar.query.edit) {
-                      let current_column;
-                      for (value in row) {
-                        for (column of fields) {
-                          if (column.name == value) {
-                            current_column = column.name;
+                  database.query(
+                    `SELECT * FROM ${urlbar.query.db}.${urlbar.query.table}`,
+                    function (err, result, fields) {
+                      let final = "";
+                      if (urlbar.query.db && urlbar.query.table) {
+                        if (err) {
+                          page.send(
+                            `<script>alert("${err}"); history.back();</script>`
+                          );
+                          page.end();
+                          return;
+                        }
+                        let exists = false;
+                        if (urlbar.query.edit) {
+                          final += `<form action="/save_record" method="post"><input type="submit" value="Save">`;
+                          let columns = [];
+                          let rows = [];
+                          for (column of fields) {
+                            columns.push(
+                              `<label for="${column.name}">${column.name}: </label>`
+                            );
+                            for (row of result) {
+                              if (row["ID"] == urlbar.query.edit) {
+                                exists = true;
+                              }
+                            }
+                            if (!exists) {
+                              page.send(
+                                `<script>alert("Record Does not Exist in Table"); history.back();</script>`
+                              );
+                              page.end();
+                              return;
+                            }
                           }
+                          for (row of result) {
+                            if (row["ID"] == urlbar.query.edit) {
+                              let current_column;
+                              for (value in row) {
+                                for (column of fields) {
+                                  if (column.name == value) {
+                                    current_column = column.name;
+                                  }
+                                }
+                                let val = row[value];
+                                try {
+                                  val = val.toISOString();
+                                } catch {}
+                                rows.push(
+                                  `<input type="text" name="${current_column}" id="${current_column}" value="${format(
+                                    row[value]
+                                  )}">`
+                                );
+                              }
+                            }
+                          }
+                          for (let i = 0; i < columns.length; i++) {
+                            final += "<h3>" + columns[i] + rows[i] + "</h3>";
+                          }
+                        } else if (urlbar.query.create) {
+                          final += `<form action="/save_record" method="post"><input type="submit" value="Save">`;
+                          for (column of fields) {
+                            final += `<h3><label for="${column.name}">${column.name}: </label><input type="text" name="${column.name}" id="${column.name}"></h3>`;
+                          }
+                        } else if (urlbar.query.delete) {
+                          final += `<form action="/delete_record" method="post"><input type="number" name="ID" id="ID" required><input type="submit" value="Delete">`;
+                        } else {
+                          final += '<table style="width:100%;"><tr><th>';
+                          const permissions = permissionsFor(
+                            account,
+                            urlbar.query.db,
+                            urlbar.query.table
+                          );
+                          if (!permissions || permissions.canCreate == 1) {
+                            final +=
+                              '<a onclick="record_create()" style="color: blue; cursor: pointer">Create</a>';
+                          }
+                          final += "</th>";
+                          let searchbar =
+                            '<div class="search"><form onsubmit="search_table(); return false;"><select id="search-column">';
+                          for (column of fields) {
+                            searchbar += `<option value="${column.name}">${column.name}</option>`;
+                            if (urlbar.query.sortBy == column.name) {
+                              if (urlbar.query.reversed == "false") {
+                                final += `<th><a onclick="sort_by_column('${column.name}')" style="color: blue; cursor: pointer">${column.name}</a></th>`;
+                              } else {
+                                final += `<th><a onclick="sort_by_column('${column.name}')" style="color: red; cursor: pointer">${column.name}</a></th>`;
+                              }
+                            } else {
+                              final += `<th><a onclick="sort_by_column('${column.name}')" style="cursor: pointer">${column.name}</a></th>`;
+                            }
+                          }
+                          searchbar +=
+                            '</select> <input type="text" name="Search" id="searchbar"> <input type="submit" value="Search"></div>';
+                          final += `</tr>`;
+                          if (urlbar.query.sortBy) {
+                            if (urlbar.query.reversed == "false") {
+                              result.sort((a, b) => {
+                                if (
+                                  a[urlbar.query.sortBy] >
+                                  b[urlbar.query.sortBy]
+                                ) {
+                                  return 1;
+                                } else if (
+                                  a[urlbar.query.sortBy] <
+                                  b[urlbar.query.sortBy]
+                                ) {
+                                  return -1;
+                                }
+                                return 0;
+                              });
+                            } else {
+                              result.sort((a, b) => {
+                                if (
+                                  a[urlbar.query.sortBy] <
+                                  b[urlbar.query.sortBy]
+                                ) {
+                                  return 1;
+                                } else if (
+                                  a[urlbar.query.sortBy] >
+                                  b[urlbar.query.sortBy]
+                                ) {
+                                  return -1;
+                                }
+                                return 0;
+                              });
+                            }
+                          }
+                          for (row of result) {
+                            if (
+                              urlbar.query.searchCol &&
+                              urlbar.query.searchQuery
+                            ) {
+                              if (!row[urlbar.query.searchCol]) continue;
+                              else if (
+                                format(row[urlbar.query.searchCol])
+                                  .toString()
+                                  .includes(urlbar.query.searchQuery)
+                              ) {
+                              } else continue;
+                            }
+                            final += `<tr><td> `;
+                            const permissions = permissionsFor(
+                              account,
+                              urlbar.query.db,
+                              urlbar.query.table
+                            );
+                            if (!permissions || permissions.canEdit == 1) {
+                              final +=
+                                '<a onclick="record_edit(${row["ID"]})" style="color: blue; cursor: pointer">Edit</a> ';
+                            }
+                            if (!permissions || permissions.canDelete == 1) {
+                              final +=
+                                '<a onclick="record_delete(${row["ID"]})" style="color: red; cursor: pointer">Delete</a>';
+                            }
+
+                            final += "</td>";
+                            for (value in row) {
+                              final += `<td>${format(row[value])}</td>`;
+                            }
+                            final += `</tr>`;
+                          }
+                          final += `</table>${searchbar}`;
                         }
-                        let val = row[value];
-                        try {
-                          val = val.toISOString();
-                        } catch {}
-                        rows.push(
-                          `<input type="text" name="${current_column}" id="${current_column}" value="${format(
-                            row[value]
-                          )}">`
-                        );
                       }
-                    }
-                  }
-                  for (let i = 0; i < columns.length; i++) {
-                    final += "<h3>" + columns[i] + rows[i] + "</h3>";
-                  }
-                } else if (urlbar.query.create) {
-                  final += `<form action="/save_record" method="post"><input type="submit" value="Save">`;
-                  for (column of fields) {
-                    final += `<h3><label for="${column.name}">${column.name}: </label><input type="text" name="${column.name}" id="${column.name}"></h3>`;
-                  }
-                } else if (urlbar.query.delete) {
-                  final += `<form action="/delete_record" method="post"><input type="number" name="ID" id="ID" required><input type="submit" value="Delete">`;
-                } else {
-                  final +=
-                    '<table style="width:100%;"><tr><th><a onclick="record_create()" style="color: blue; cursor: pointer">Create</a></th>';
-                  let searchbar =
-                    '<div class="search"><form onsubmit="search_table(); return false;"><select id="search-column">';
-                  for (column of fields) {
-                    searchbar += `<option value="${column.name}">${column.name}</option>`;
-                    if (urlbar.query.sortBy == column.name) {
-                      if (urlbar.query.reversed == "false") {
-                        final += `<th><a onclick="sort_by_column('${column.name}')" style="color: blue; cursor: pointer">${column.name}</a></th>`;
-                      } else {
-                        final += `<th><a onclick="sort_by_column('${column.name}')" style="color: red; cursor: pointer">${column.name}</a></th>`;
-                      }
-                    } else {
-                      final += `<th><a onclick="sort_by_column('${column.name}')" style="cursor: pointer">${column.name}</a></th>`;
-                    }
-                  }
-                  searchbar +=
-                    '</select> <input type="text" name="Search" id="searchbar"> <input type="submit" value="Search"></div>';
-                  final += `</tr>`;
-                  if (urlbar.query.sortBy) {
-                    if (urlbar.query.reversed == "false") {
-                      result.sort((a, b) => {
-                        if (a[urlbar.query.sortBy] > b[urlbar.query.sortBy]) {
-                          return 1;
-                        } else if (
-                          a[urlbar.query.sortBy] < b[urlbar.query.sortBy]
-                        ) {
-                          return -1;
-                        }
-                        return 0;
-                      });
-                    } else {
-                      result.sort((a, b) => {
-                        if (a[urlbar.query.sortBy] < b[urlbar.query.sortBy]) {
-                          return 1;
-                        } else if (
-                          a[urlbar.query.sortBy] > b[urlbar.query.sortBy]
-                        ) {
-                          return -1;
-                        }
-                        return 0;
+                      callback({
+                        schemas: schemas,
+                        tables: tables,
+                        final: final,
                       });
                     }
-                  }
-                  for (row of result) {
-                    if (urlbar.query.searchCol && urlbar.query.searchQuery) {
-                      if (!row[urlbar.query.searchCol]) continue;
-                      else if (
-                        format(row[urlbar.query.searchCol])
-                          .toString()
-                          .includes(urlbar.query.searchQuery)
-                      ) {
-                      } else continue;
-                    }
-                    final += `<tr><td><a onclick="record_edit(${row["ID"]})" style="color: blue; cursor: pointer">Edit</a> <a onclick="record_delete(${row["ID"]})" style="color: red; cursor: pointer">Delete</a></td>`;
-                    for (value in row) {
-                      final += `<td>${format(row[value])}</td>`;
-                    }
-                    final += `</tr>`;
-                  }
-                  final += `</table>${searchbar}`;
+                  );
                 }
-              }
-              callback({ schemas: schemas, tables: tables, final: final });
-            }
-          );
-        }
-      );
-    });
+              );
+            });
+          }
+        );
+      }
+    );
   }
   function gen_skeleton(data) {
     let payload = "";
@@ -301,7 +394,9 @@ app.use(express.urlencoded({ extended: true }));
 app.use(express.static(path.join(__dirname, "static")));
 app.get("/", function (request, response) {
   if (request.session.loggedin) {
-    gen_webpage(request, response);
+    validate_mysql_obj(() => {
+      gen_webpage(request, response);
+    }, static_tables.auth.permissions);
   } else {
     function if_auth(valid) {
       if (valid) {
@@ -314,7 +409,7 @@ app.get("/", function (request, response) {
   }
 });
 app.post("/auth", function (request, response) {
-  function callback() {
+  validate_mysql_obj(() => {
     let username = request.body.username;
     let password = request.body.password;
     let previous_query = url.parse(request.rawHeaders[33], true).search;
@@ -347,12 +442,7 @@ app.post("/auth", function (request, response) {
         }
       );
     }
-  }
-  validate_history_schema(
-    callback,
-    "logins",
-    "`ID` INT NOT NULL AUTO_INCREMENT, `accountID` INT NOT NULL, `username` VARCHAR(255) NULL, `ip` VARCHAR(255) NOT NULL, `type` VARCHAR(255) NOT NULL, `timestamp` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY (`ID`)"
-  );
+  }, static_tables.history.logins);
 });
 app.post("/register", function (request, response) {
   function if_auth(valid) {
@@ -366,7 +456,7 @@ app.post("/register", function (request, response) {
         return;
       }
       database.query(
-        "CREATE TABLE auth.accounts (`ID` INT NOT NULL AUTO_INCREMENT, `username` VARCHAR(50) NOT NULL, `password` VARCHAR(255) NOT NULL, `createdDate` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY (`ID`));",
+        "CREATE TABLE auth.accounts (`ID` INT NOT NULL AUTO_INCREMENT, `username` VARCHAR(50) NOT NULL, `password` VARCHAR(255) NOT NULL, `admin` TINYINT NOT NULL  DEFAULT 0, `createdDate` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY (`ID`));",
         function (err, result) {
           if (err) {
             response.send(`<script>alert("${err}"); history.back();</script>`);
@@ -374,7 +464,7 @@ app.post("/register", function (request, response) {
             return;
           }
           database.query(
-            `INSERT INTO auth.accounts (\`username\`, \`password\`) VALUES ('${username}', '${password}');`,
+            `INSERT INTO auth.accounts (\`username\`, \`password\`, \`admin\`) VALUES ('${username}', '${password}', 1);`,
             function (err, result) {
               if (err) {
                 response.send(
@@ -394,7 +484,7 @@ app.post("/register", function (request, response) {
 });
 app.use(session({ secret: "secret", resave: true, saveUninitialized: true }));
 app.post("/save_record", function (request, response) {
-  function callback() {
+  validate_mysql_obj(() => {
     let type;
     const record_information = url.parse(request.rawHeaders[33], true).query;
     const record_data = request.body;
@@ -464,15 +554,10 @@ app.post("/save_record", function (request, response) {
         }
       );
     });
-  }
-  validate_history_schema(
-    callback,
-    "record_changes",
-    "`ID` INT NOT NULL AUTO_INCREMENT, `accountID` INT NOT NULL, `username` VARCHAR(255) NOT NULL, `type` VARCHAR(255) NOT NULL, `recordID` INT NOT NULL, `ip` VARCHAR(255) NOT NULL, `table` VARCHAR(255) NOT NULL, `newData` JSON NOT NULL, `timestamp` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY (`ID`)"
-  );
+  }, static_tables.history.record_changes);
 });
 app.post("/delete_record", function (request, response) {
-  function callback() {
+  validate_mysql_obj(() => {
     const record_information = url.parse(request.rawHeaders[33], true).query;
     const record_data = request.body;
     if (record_data.ID != record_information.delete) {
@@ -520,15 +605,10 @@ app.post("/delete_record", function (request, response) {
         );
       }
     );
-  }
-  validate_history_schema(
-    callback,
-    "record_changes",
-    "`ID` INT NOT NULL AUTO_INCREMENT, `accountID` INT NOT NULL, `username` VARCHAR(255) NOT NULL, `type` VARCHAR(255) NOT NULL, `recordID` INT NOT NULL, `ip` VARCHAR(255) NOT NULL, `table` VARCHAR(255) NOT NULL, `newData` JSON NOT NULL, `timestamp` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY (`ID`)"
-  );
+  }, static_tables.history.record_changes);
 });
 app.get("/logout", function (request, response) {
-  function callback() {
+  validate_mysql_obj(() => {
     if (request.session.loggedin) {
       request.session.loggedin = false;
     }
@@ -539,15 +619,10 @@ app.get("/logout", function (request, response) {
       }
     );
     response.redirect("/");
-  }
-  validate_history_schema(
-    callback,
-    "logins",
-    "`ID` INT NOT NULL AUTO_INCREMENT, `accountID` INT NOT NULL, `username` VARCHAR(255) NULL, `ip` VARCHAR(255) NOT NULL, `type` VARCHAR(255) NOT NULL, `timestamp` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY (`ID`)"
-  );
+  }, static_tables.history.logins);
 });
 
-function start_server() {
+validate_mysql_obj(() => {
   let ports = "";
   try {
     https
@@ -562,7 +637,7 @@ function start_server() {
       .listen(443, () => {
         console.log("HTTPS Server running on port 443");
       });
-      ports += '443, '
+    ports += "443, ";
   } catch {
     console.log("Caution: Connections will not be secured");
   }
@@ -570,16 +645,11 @@ function start_server() {
   httpServer.listen(8080, () => {
     console.log("HTTP Server running on port 8080");
   });
-  ports += '8080'
+  ports += "8080";
   database.query(
     `INSERT INTO history.startupLog (\`ports\`) VALUES ('${ports}');`,
     function (err, result) {
       if (err) throw err;
     }
   );
-}
-validate_history_schema(
-  start_server,
-  "startupLog",
-  "`ID` INT NOT NULL AUTO_INCREMENT, `ports` VARCHAR(255) NOT NULL, `timestamp` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY (`ID`)"
-);
+}, static_tables.history.startupLog);

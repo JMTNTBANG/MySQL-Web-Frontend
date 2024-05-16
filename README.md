@@ -1,4 +1,4 @@
-# MySQL Web Frontend v1.0.1b2
+# MySQL Web Frontend v1.0.1b3
 A Web Interface for a MySQL Server
 
 ## Setup
