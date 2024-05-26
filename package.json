@@ -1,6 +1,6 @@
 {
   "name": "mysql-web-frontend",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "A Web Interface for a MySQL Server",
   "main": "src/index.js",
   "scripts": {
