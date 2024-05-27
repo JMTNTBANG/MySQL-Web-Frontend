@@ -32,6 +32,29 @@ function format(value) {
   return newValue;
 }
 
+function permissionsFor(user, schema, table = undefined) {
+  for (permission of user.permissions) {
+    if (permission.schema == schema) {
+      if (!table || permission.table == table || permission.table == "*") {
+        return {
+          canView: permission.canView,
+          canCreate: permission.canCreate,
+          canEdit: permission.canEdit,
+          canDelete: permission.canDelete,
+        };
+      } else continue;
+    } else continue;
+  }
+  if (user.admin == 1)
+    return {
+      canView: 1,
+      canCreate: 1,
+      canEdit: 1,
+      canDelete: 1,
+    };
+  return null;
+}
+
 function validate_auth_schema(callback) {
   database.query("SHOW SCHEMAS", function (err, result, fields) {
     if (err) throw err;
@@ -105,29 +128,6 @@ function gen_webpage(req, page) {
           `SELECT * FROM auth.accounts WHERE ID = ${req.session.userid}`,
           (err, account, x) => {
             if (err) throw err;
-            function permissionsFor(user, schema, table = undefined) {
-              for (permission of user.permissions) {
-                if (permission.schema == schema) {
-                  if (!table || permission.table == table || permission.table == '*') {
-                    return {
-                      canView: permission.canView,
-                      canCreate: permission.canCreate,
-                      canEdit: permission.canEdit,
-                      canDelete: permission.canDelete,
-                    };
-                  } else continue;
-                }
-                else continue;
-              }
-              if (user.admin == 1)
-                return {
-                  canView: 1,
-                  canCreate: 1,
-                  canEdit: 1,
-                  canDelete: 1,
-                };
-              return null;
-            }
             account = account[0];
             account.permissions = permissions;
             database.query("SHOW SCHEMAS", function (err, result, fields) {
@@ -163,7 +163,11 @@ function gen_webpage(req, page) {
                     tables +=
                       '<form onsubmit="table_submit(); return false;"><label for="tabel-sel">Tables:</label> <select id="table-sel">';
                     for (table of result) {
-                      const permissions = permissionsFor(account, urlbar.query.db, table[`Tables_in_${urlbar.query.db}`]);
+                      const permissions = permissionsFor(
+                        account,
+                        urlbar.query.db,
+                        table[`Tables_in_${urlbar.query.db}`]
+                      );
                       if (!permissions || permissions.canView == 0) continue;
                       tables += `<option`;
                       if (
@@ -318,19 +322,17 @@ function gen_webpage(req, page) {
                               ) {
                               } else continue;
                             }
-                            final += `<tr><td> `;
+                            final += `<tr><td style="width: 75px"> `;
                             const permissions = permissionsFor(
                               account,
                               urlbar.query.db,
                               urlbar.query.table
                             );
                             if (!permissions || permissions.canEdit == 1) {
-                              final +=
-                                '<a onclick="record_edit(${row["ID"]})" style="color: blue; cursor: pointer">Edit</a> ';
+                              final += `<a onclick="record_edit(${row["ID"]})" style="color: blue; cursor: pointer">Edit</a> `;
                             }
                             if (!permissions || permissions.canDelete == 1) {
-                              final +=
-                                '<a onclick="record_delete(${row["ID"]})" style="color: red; cursor: pointer">Delete</a>';
+                              final += `<a onclick="record_delete(${row["ID"]})" style="color: red; cursor: pointer">Delete</a>`;
                             }
 
                             final += "</td>";
@@ -484,128 +486,211 @@ app.post("/register", function (request, response) {
 });
 app.use(session({ secret: "secret", resave: true, saveUninitialized: true }));
 app.post("/save_record", function (request, response) {
-  validate_mysql_obj(() => {
-    let type;
-    const record_information = url.parse(request.rawHeaders[33], true).query;
-    const record_data = request.body;
-    let changes = "";
-    if (record_information.edit) {
-      type = "EDIT";
-      changes = `UPDATE ${record_information.db}.${record_information.table} SET `;
-      let first = true;
-      for (column in record_data) {
-        let text = `'${record_data[column]}'`;
-        if (text == "'null'") {
-          text = "null";
-        }
-        if (first) {
-          changes += `\`${column}\` = ${text}`;
-          first = false;
-        } else {
-          changes += `, \`${column}\` = ${text}`;
-        }
-      }
-      changes += ` WHERE (\`ID\` = '${record_information.edit}');`;
-    } else if (record_information.create) {
-      type = "CREATE";
-      let columns = "";
-      let values = "";
-      let first = true;
-      for (column in record_data) {
-        let text = `'${record_data[column]}'`;
-        if (text == "'null'") {
-          text = "null";
-        }
-        if (text != "''") {
-          if (first) {
-            columns += `\`${column}\``;
-            values += `${text}`;
-            first = false;
-          } else {
-            columns += `, \`${column}\``;
-            values += `, ${text}`;
-          }
-        }
-        changes = `INSERT INTO ${record_information.db}.${record_information.table} (${columns}) VALUES (${values});`;
-      }
-    }
-    database.query(changes, function (err, result, fields) {
-      if (err) {
-        response.send(`<script>alert("${err}"); history.back();</script>`);
-        response.end();
-        return;
-      }
-      let recordId = record_information.edit;
-      if (result.insertId > 0) recordId = result.insertId;
+  if (request.session.loggedin) {
+    validate_mysql_obj(() => {
       database.query(
-        `INSERT INTO history.record_changes (\`accountID\`, \`username\`, \`type\`, \`recordID\`, \`ip\`, \`table\`, \`newData\`) VALUES ('${
-          request.session.userid
-        }', '${request.session.username}', '${type}', '${recordId}', '${
-          request.ip
-        }', '${record_information.db}.${
-          record_information.table
-        }', '${JSON.stringify(record_data)}');`,
-        function (err, results) {
+        `SELECT * FROM auth.permissions WHERE userId = ${request.session.userid}`,
+        (err, permission, x) => {
           if (err) throw err;
-          response.redirect(
-            `/?db=${record_information.db}&table=${record_information.table}`
+          database.query(
+            `SELECT * FROM auth.accounts WHERE ID = ${request.session.userid}`,
+            (err, account, x) => {
+              if (err) throw err;
+              account = account[0];
+              account.permissions = permission;
+              let type;
+              const record_information = url.parse(
+                request.rawHeaders[33],
+                true
+              ).query;
+              const record_data = request.body;
+              let changes = "";
+              const permissions = permissionsFor(
+                account,
+                record_information.db,
+                record_information.table
+              );
+              if (record_information.edit) {
+                if (!permissions || permissions.canEdit == 1) {
+                  type = "EDIT";
+                  changes = `UPDATE ${record_information.db}.${record_information.table} SET `;
+                  let first = true;
+                  for (column in record_data) {
+                    let text = `'${record_data[column]}'`;
+                    if (text == "'null'") {
+                      text = "null";
+                    }
+                    if (first) {
+                      changes += `\`${column}\` = ${text}`;
+                      first = false;
+                    } else {
+                      changes += `, \`${column}\` = ${text}`;
+                    }
+                  }
+                  changes += ` WHERE (\`ID\` = '${record_information.edit}');`;
+                } else {
+                  response.send(
+                    `<script>alert("Access Denied"); history.back();</script>`
+                  );
+                  response.end();
+                  return;
+                }
+              } else if (record_information.create) {
+                if (!permissions || permissions.canCreate == 1) {
+                  type = "CREATE";
+                  let columns = "";
+                  let values = "";
+                  let first = true;
+                  for (column in record_data) {
+                    let text = `'${record_data[column]}'`;
+                    if (text == "'null'") {
+                      text = "null";
+                    }
+                    if (text != "''") {
+                      if (first) {
+                        columns += `\`${column}\``;
+                        values += `${text}`;
+                        first = false;
+                      } else {
+                        columns += `, \`${column}\``;
+                        values += `, ${text}`;
+                      }
+                    }
+                    changes = `INSERT INTO ${record_information.db}.${record_information.table} (${columns}) VALUES (${values});`;
+                  }
+                } else {
+                  response.send(
+                    `<script>alert("Access Denied"); history.back();</script>`
+                  );
+                  response.end();
+                  return;
+                }
+              }
+              database.query(changes, function (err, result, fields) {
+                if (err) {
+                  response.send(
+                    `<script>alert("${err}"); history.back();</script>`
+                  );
+                  response.end();
+                  return;
+                }
+                let recordId = record_information.edit;
+                if (result.insertId > 0) recordId = result.insertId;
+                database.query(
+                  `INSERT INTO history.record_changes (\`accountID\`, \`username\`, \`type\`, \`recordID\`, \`ip\`, \`table\`, \`newData\`) VALUES ('${
+                    request.session.userid
+                  }', '${
+                    request.session.username
+                  }', '${type}', '${recordId}', '${request.ip}', '${
+                    record_information.db
+                  }.${record_information.table}', '${JSON.stringify(
+                    record_data
+                  )}');`,
+                  function (err, results) {
+                    if (err) throw err;
+                    response.redirect(
+                      `/?db=${record_information.db}&table=${record_information.table}`
+                    );
+                    response.end();
+                  }
+                );
+              });
+            }
           );
-          response.end();
         }
       );
-    });
-  }, static_tables.history.record_changes);
+    }, static_tables.history.record_changes);
+  } else {
+    response.send(
+      `<script>alert("Session Expired, Please Sign in Again."); window.location.pathname = "/";</script>`
+    );
+    response.end();
+  }
 });
 app.post("/delete_record", function (request, response) {
-  validate_mysql_obj(() => {
-    const record_information = url.parse(request.rawHeaders[33], true).query;
-    const record_data = request.body;
-    if (record_data.ID != record_information.delete) {
-      response.send(
-        `<script>alert("You did not enter the correct ID"); history.back();</script>`
-      );
-      response.end();
-      return;
-    }
-    database.query(
-      `SELECT * FROM ${record_information.db}.${record_information.table} WHERE ID='${record_information.delete}'`,
-      function (err, dataresult, datafields) {
-        if (err) {
-          response.send(`<script>alert("${err}"); history.back();</script>`);
-          response.end();
-          return;
-        }
-        database.query(
-          `DELETE FROM ${record_information.db}.${record_information.table} WHERE ID='${record_information.delete}'`,
-          function (err, result) {
-            let final = `<title>Deletion Successful</title><script>${client_script}</script><style>${client_styles}</style>`;
-            if (err) {
-              response.send(
-                `<script>alert("${err}"); history.back();</script>`
-              );
-              response.end();
-              return;
-            }
-            database.query(
-              `INSERT INTO history.record_changes (\`accountID\`, \`username\`, \`type\`, \`recordID\`, \`ip\`, \`table\`, \`newData\`) VALUES ('${
-                request.session.userid
-              }', '${request.session.username}', 'DELETE', '${
-                dataresult[0].ID
-              }', '${request.ip}', '${record_information.db}.${
-                record_information.table
-              }', '${JSON.stringify(dataresult[0])}');`,
-              function (err, results) {
-                if (err) throw err;
-                final += `<h2>Successfully Deleted ID ${record_information.delete}</h2><form onsubmit="location.href = '/?db=${record_information.db}&table=${record_information.table}'; return false;"><input type="submit" value="Go Back"></form>`;
-                response.send(final);
+  if (request.session.loggedin) {
+    validate_mysql_obj(() => {
+      database.query(
+        `SELECT * FROM auth.permissions WHERE userId = ${request.session.userid}`,
+        (err, permission, x) => {
+          if (err) throw err;
+          database.query(
+            `SELECT * FROM auth.accounts WHERE ID = ${request.session.userid}`,
+            (err, account, x) => {
+              if (err) throw err;
+              account = account[0];
+              account.permissions = permission;
+              if (!permissions || permissions.canDelete == 1) {
+                const record_information = url.parse(
+                  request.rawHeaders[33],
+                  true
+                ).query;
+                const record_data = request.body;
+                if (record_data.ID != record_information.delete) {
+                  response.send(
+                    `<script>alert("You did not enter the correct ID"); history.back();</script>`
+                  );
+                  response.end();
+                  return;
+                }
+                database.query(
+                  `SELECT * FROM ${record_information.db}.${record_information.table} WHERE ID='${record_information.delete}'`,
+                  function (err, dataresult, datafields) {
+                    if (err) {
+                      response.send(
+                        `<script>alert("${err}"); history.back();</script>`
+                      );
+                      response.end();
+                      return;
+                    }
+                    database.query(
+                      `DELETE FROM ${record_information.db}.${record_information.table} WHERE ID='${record_information.delete}'`,
+                      function (err, result) {
+                        let final = `<title>Deletion Successful</title><script>${client_script}</script><style>${client_styles}</style>`;
+                        if (err) {
+                          response.send(
+                            `<script>alert("${err}"); history.back();</script>`
+                          );
+                          response.end();
+                          return;
+                        }
+                        database.query(
+                          `INSERT INTO history.record_changes (\`accountID\`, \`username\`, \`type\`, \`recordID\`, \`ip\`, \`table\`, \`newData\`) VALUES ('${
+                            request.session.userid
+                          }', '${request.session.username}', 'DELETE', '${
+                            dataresult[0].ID
+                          }', '${request.ip}', '${record_information.db}.${
+                            record_information.table
+                          }', '${JSON.stringify(dataresult[0])}');`,
+                          function (err, results) {
+                            if (err) throw err;
+                            final += `<h2>Successfully Deleted ID ${record_information.delete}</h2><form onsubmit="location.href = '/?db=${record_information.db}&table=${record_information.table}'; return false;"><input type="submit" value="Go Back"></form>`;
+                            response.send(final);
+                            response.end();
+                          }
+                        );
+                      }
+                    );
+                  }
+                );
+              } else {
+                response.send(
+                  `<script>alert("Access Denied"); history.back();</script>`
+                );
                 response.end();
+                return;
               }
-            );
-          }
-        );
-      }
+            }
+          );
+        }
+      );
+    }, static_tables.history.record_changes);
+  } else {
+    response.send(
+      `<script>alert("Session Expired, Please Sign in Again."); window.location.pathname = "/";</script>`
     );
-  }, static_tables.history.record_changes);
+    response.end();
+  }
 });
 app.get("/logout", function (request, response) {
   validate_mysql_obj(() => {
