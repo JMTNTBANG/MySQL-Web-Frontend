@@ -161,7 +161,7 @@ module.exports = {
                               }', '${JSON.stringify(dataresult[0])}');`,
                               (err, results) => {
                                 if (err) throw err;
-                                final += `<h2>Successfully Deleted ID ${record_information.delete}</h2><form onsubmit="location.href = '/?db=${record_information.db}&table=${record_information.table}'; return false;"><input type="submit" value="Go Back"></form>`;
+                                final += `<h2>Successfully Deleted ID ${record_information.delete}</h2><form onsubmit="location.href = '${prefix}?db=${record_information.db}&table=${record_information.table}'; return false;"><input type="submit" value="Go Back"></form>`;
                                 page.send(final);
                                 page.end();
                               }

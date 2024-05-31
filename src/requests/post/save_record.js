@@ -214,7 +214,7 @@ module.exports = {
         }, static_tables.history.record_changes);
       } else {
         page.send(
-          `<script>alert("Session Expired, Please Sign in Again."); window.location.pathname = "/";</script>`
+          `<script>alert("Session Expired, Please Sign in Again."); window.location.pathname = "${prefix}";</script>`
         );
         page.end();
       }
