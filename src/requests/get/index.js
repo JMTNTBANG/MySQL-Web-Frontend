@@ -375,7 +375,7 @@ module.exports = {
                               if (query.edit || query.create || query.delete) {
                                 payload += `${final}`;
                               } else {
-                                payload += `${schemas}${tables}${final}<a class="logout" href="/logout">Logout</a>`;
+                                payload += `${schemas}${tables}${final}<a class="logout" href="${prefix}logout">Logout</a>`;
                               }
                               page.send(payload);
                               page.end();
