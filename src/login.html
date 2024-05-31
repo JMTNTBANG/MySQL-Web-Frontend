@@ -15,7 +15,7 @@
     </style>
     <script>
       window.onload = () => {
-        if (window.location.search)
+        if (window.location.pathname.substr(-1) == "/")
           document.login.action = `${window.location.origin}${window.location.pathname}auth`;
         else
           document.login.action = `${window.location.origin}${window.location.pathname}/auth`;
