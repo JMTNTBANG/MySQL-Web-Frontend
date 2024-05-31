@@ -12,10 +12,10 @@ const session = require("express-session");
 
 // Local Files
 const config = require("./config.json");
-const static_tables = require("./staticTables.json")
+const static_tables = require("./staticTables.json");
 
 // Init function for when running as module
-function init() {
+function init(prefix = undefined, website = undefined) {
   const database = mysql.createConnection({
     host: config.server.ip,
     port: config.server.port,
@@ -37,13 +37,10 @@ function init() {
         );
       }
       if (!skip_db) {
-        database.query(
-          `CREATE SCHEMA ${data.schema};`,
-          function (err, result) {
-            if (err) throw err;
-            create_table();
-          }
-        );
+        database.query(`CREATE SCHEMA ${data.schema};`, function (err, result) {
+          if (err) throw err;
+          create_table();
+        });
       } else create_table();
     }
     database.query("SHOW SCHEMAS", function (err, result, fields) {
@@ -74,7 +71,9 @@ function init() {
     });
   }
   // Web Server Initialization
-  const website = express();
+  if (!module.parent) {
+    website = express();
+  }
   website.use(
     session({ secret: "secret", resave: true, saveUninitialized: true })
   );
@@ -84,45 +83,48 @@ function init() {
 
   for (const getRequest of fs.readdirSync(`${__dirname}/requests/get/`)) {
     let request = require(`${__dirname}/requests/get/${getRequest}`);
-    request.init(website);
+    request.init(prefix, website);
   }
   for (const postRequest of fs.readdirSync(`${__dirname}/requests/post/`)) {
     let request = require(`${__dirname}/requests/post/${postRequest}`);
-    request.init(website);
+    request.init(prefix, website);
   }
 
   // Open Ports
-  validate_mysql_obj(() => {
-    let ports = "";
-    try {
-      https
-        .createServer(
-          {
-            key: fs.readFileSync(`${config.ssl}/privkey.pem`, "utf8"),
-            cert: fs.readFileSync(`${config.ssl}/cert.pem`, "utf8"),
-            ca: fs.readFileSync(`${config.ssl}/chain.pem`, "utf8"),
-          },
-          website
-        )
-        .listen(443, () => {
-          console.log("HTTPS Server running on port 443");
-        });
-      ports += "443, ";
-    } catch {
-      console.log("Caution: Connections will not be secured");
-    }
-    const httpServer = http.createServer(website);
-    httpServer.listen(8080, () => {
-      console.log("HTTP Server running on port 8080");
-    });
-    ports += "8080";
-    database.query(
-      `INSERT INTO history.startupLog (\`ports\`) VALUES ('${ports}');`,
-      function (err, result) {
-        if (err) throw err;
+  if (!module.parent) {
+    validate_mysql_obj(() => {
+      let ports = "";
+      try {
+        https
+          .createServer(
+            {
+              key: fs.readFileSync(`${config.ssl}/privkey.pem`, "utf8"),
+              cert: fs.readFileSync(`${config.ssl}/cert.pem`, "utf8"),
+              ca: fs.readFileSync(`${config.ssl}/chain.pem`, "utf8"),
+            },
+            website
+          )
+          .listen(443, () => {
+            console.log("HTTPS Server running on port 443");
+          });
+        ports += "443, ";
+      } catch {
+        console.log("Caution: Connections will not be secured");
       }
-    );
-  }, static_tables.history.startupLog);
+      const httpServer = http.createServer(website);
+      httpServer.listen(8080, () => {
+        console.log("HTTP Server running on port 8080");
+      });
+      ports += "8080";
+      database.query(
+        `INSERT INTO history.startupLog (\`ports\`) VALUES ('${ports}');`,
+        function (err, result) {
+          if (err) throw err;
+        }
+      );
+    }, static_tables.history.startupLog);
+  }
 }
+module.exports = { init: init };
 
-module.exports = { init: init() };
+if (!module.parent) init()

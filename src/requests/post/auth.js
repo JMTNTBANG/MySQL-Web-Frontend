@@ -4,7 +4,10 @@ const config = require("../../config.json");
 const static_tables = require("../../staticTables.json")
 
 module.exports = {
-  init: (website) => {
+  init: (prefix, website) => {
+    if (!prefix) {
+      prefix = "/"
+    }
     // Database
     const database = mysql.createConnection({
       host: config.server.ip,
@@ -82,13 +85,15 @@ module.exports = {
           );
       });
     }
-    website.post("/auth", (req, page) => {
+    website.post(`${prefix}auth`, (req, page) => {
       validate_mysql_obj(() => {
         let username = req.body.username;
         let password = req.body.password;
         let previous_query = url.parse(req.rawHeaders[33], true).search;
         if (previous_query == null) {
           previous_query = "";
+        } else {
+          previous_query.slice(0, 1)
         }
         if (username && password) {
           database.query(
@@ -103,9 +108,9 @@ module.exports = {
                 return;
               }
               if (results.length > 0) {
-                req.session.loggedin = true;
-                req.session.username = username;
-                req.session.userId = results[0].ID;
+                req.session.dbloggedin = true;
+                req.session.dbusername = username;
+                req.session.dbuserId = results[0].ID;
                 database.query(
                   `INSERT INTO history.logins (\`accountID\`, \`username\`, \`ip\`, \`type\`) VALUES ('${results[0].ID}', '${username}', '${req.ip}', 'LOGIN');`,
                   (err, result) => {
@@ -113,7 +118,7 @@ module.exports = {
                   }
                 );
               }
-              page.redirect(`/${previous_query}`);
+              page.redirect(`${prefix}${previous_query}`);
               page.end();
             }
           );

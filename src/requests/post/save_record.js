@@ -6,7 +6,10 @@ const static_tables = require("../../staticTables.json");
 const session = require("express-session");
 
 module.exports = {
-  init: (website) => {
+  init: (prefix, website) => {
+    if (!prefix) {
+      prefix = "/"
+    }
     // Database
     const database = mysql.createConnection({
       host: config.server.ip,
@@ -94,15 +97,15 @@ module.exports = {
     website.use(
       session({ secret: "secret", resave: true, saveUninitialized: true })
     );
-    website.post("/save_record", (req, page) => {
-      if (req.session.loggedin) {
+    website.post(`${prefix}save_record`, (req, page) => {
+      if (req.session.dbloggedin) {
         validate_mysql_obj(() => {
           database.query(
-            `SELECT * FROM auth.permissions WHERE userId = ${req.session.userId}`,
+            `SELECT * FROM auth.permissions WHERE userId = ${req.session.dbuserId}`,
             (err, permission, x) => {
               if (err) throw err;
               database.query(
-                `SELECT * FROM auth.accounts WHERE ID = ${req.session.userId}`,
+                `SELECT * FROM auth.accounts WHERE ID = ${req.session.dbuserId}`,
                 (err, account, x) => {
                   if (err) throw err;
                   account = account[0];
@@ -187,9 +190,9 @@ module.exports = {
                     if (result.insertId > 0) recordId = result.insertId;
                     database.query(
                       `INSERT INTO history.record_changes (\`accountID\`, \`username\`, \`type\`, \`recordID\`, \`ip\`, \`table\`, \`newData\`) VALUES ('${
-                        req.session.userId
+                        req.session.dbuserId
                       }', '${
-                        req.session.username
+                        req.session.dbusername
                       }', '${type}', '${recordId}', '${req.ip}', '${
                         record_information.db
                       }.${record_information.table}', '${JSON.stringify(
@@ -198,7 +201,7 @@ module.exports = {
                       (err, results) => {
                         if (err) throw err;
                         page.redirect(
-                          `/?db=${record_information.db}&table=${record_information.table}`
+                          `${prefix}?db=${record_information.db}&table=${record_information.table}`
                         );
                         page.end();
                       }

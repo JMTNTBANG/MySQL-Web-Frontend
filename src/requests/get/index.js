@@ -3,11 +3,14 @@ const url = require("url");
 const mysql = require("mysql");
 const config = require("../../config.json");
 const static_tables = require("../../staticTables.json")
-const client_styles = fs.readFileSync("src/client.css");
-const client_script = fs.readFileSync("src/client.js").toString();
+const client_styles = fs.readFileSync(`${__dirname.slice(0, -13)}/client.css`);
+const client_script = fs.readFileSync(`${__dirname.slice(0, -13)}/client.js`);
 
 module.exports = {
-  init: (website) => {
+  init: (prefix, website) => {
+    if (!prefix) {
+      prefix = "/"
+    }
     // Database
     const database = mysql.createConnection({
       host: config.server.ip,
@@ -117,16 +120,16 @@ module.exports = {
         };
       return null;
     }
-    website.get("/", (req, page) => {
+    website.get(`${prefix}`, (req, page) => {
       const query = url.parse(req.url, true).query;
-      if (req.session.loggedin) {
+      if (req.session.dbloggedin) {
         validate_mysql_obj(() => {
           database.query(
-            `SELECT * FROM auth.permissions WHERE userId = ${req.session.userId}`,
+            `SELECT * FROM auth.permissions WHERE userId = ${req.session.dbuserId}`,
             (err, permissions, x) => {
               if (err) throw err;
               database.query(
-                `SELECT * FROM auth.accounts WHERE ID = ${req.session.userId}`,
+                `SELECT * FROM auth.accounts WHERE ID = ${req.session.dbuserId}`,
                 (err, account, x) => {
                   if (err) throw err;
                   account = account[0];
@@ -202,7 +205,7 @@ module.exports = {
                                 }
                                 let exists = false;
                                 if (query.edit) {
-                                  final += `<form action="/save_record" method="post"><input type="submit" value="Save">`;
+                                  final += `<form action="${prefix}save_record" method="post"><input type="submit" value="Save">`;
                                   let columns = [];
                                   let rows = [];
                                   for (column of fields) {
@@ -248,12 +251,12 @@ module.exports = {
                                       "<h3>" + columns[i] + rows[i] + "</h3>";
                                   }
                                 } else if (query.create) {
-                                  final += `<form action="/save_record" method="post"><input type="submit" value="Save">`;
+                                  final += `<form action="${prefix}save_record" method="post"><input type="submit" value="Save">`;
                                   for (column of fields) {
                                     final += `<h3><label for="${column.name}">${column.name}: </label><input type="text" name="${column.name}" id="${column.name}"></h3>`;
                                   }
                                 } else if (query.delete) {
-                                  final += `<form action="/delete_record" method="post"><input type="number" name="ID" id="ID" required><input type="submit" value="Delete">`;
+                                  final += `<form action="${prefix}delete_record" method="post"><input type="number" name="ID" id="ID" required><input type="submit" value="Delete">`;
                                 } else {
                                   final +=
                                     '<table style="width:100%;"><tr><th>';

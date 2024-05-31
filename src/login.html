@@ -13,10 +13,18 @@
         align-items: center;
       }
     </style>
+    <script>
+      window.onload = () => {
+        if (window.location.search)
+          document.login.action = `${window.location.origin}${window.location.pathname}auth`;
+        else
+          document.login.action = `${window.location.origin}${window.location.pathname}/auth`;
+      };
+    </script>
   </head>
   <body>
     <div class="login">
-      <form action="/auth" method="post">
+      <form name="login" action="/auth" method="post">
         <center><h1>Login</h1></center>
         <center>
           <label for="username">Username </label>
@@ -28,7 +36,7 @@
             required
           />
         </center>
-        <br>
+        <br />
         <center>
           <label for="password">Password </label>
           <input
@@ -39,7 +47,7 @@
             required
           />
         </center>
-        <br>
+        <br />
         <center><input type="submit" value="Login" /></center>
       </form>
     </div>

@@ -2,7 +2,10 @@ const mysql = require("mysql");
 const config = require("../../config.json");
 
 module.exports = {
-  init: (website) => {
+  init: (prefix, website) => {
+    if (!prefix) {
+      prefix = "/"
+    }
     // Database
     const database = mysql.createConnection({
       host: config.server.ip,
@@ -22,7 +25,7 @@ module.exports = {
         callback(auth);
       });
     }
-    website.post("/register", (req, page) => {
+    website.post(`${prefix}register`, (req, page) => {
       validate_auth_schema((valid) => {
         if (valid) return;
         let username = req.body.username;
@@ -53,7 +56,7 @@ module.exports = {
                     page.end();
                     return;
                   }
-                  page.redirect("/");
+                  page.redirect(`${prefix}`);
                 }
               );
             }

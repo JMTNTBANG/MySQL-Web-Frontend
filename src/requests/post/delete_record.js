@@ -3,12 +3,15 @@ const url = require("url");
 const mysql = require("mysql");
 const config = require("../../config.json");
 const static_tables = require("../../staticTables.json");
-const client_styles = fs.readFileSync("src/client.css");
-const client_script = fs.readFileSync("src/client.js").toString();
+const client_styles = fs.readFileSync(`${__dirname.slice(0, -14)}/client.css`);
+const client_script = fs.readFileSync(`${__dirname.slice(0, -14)}/client.js`);
 const session = require("express-session");
 
 module.exports = {
-  init: (website) => {
+  init: (prefix, website) => {
+    if (!prefix) {
+      prefix = "/"
+    }
     // Database
     const database = mysql.createConnection({
       host: config.server.ip,
@@ -96,15 +99,15 @@ module.exports = {
     website.use(
       session({ secret: "secret", resave: true, saveUninitialized: true })
     );
-    website.post("/delete_record", (req, page) => {
-      if (req.session.loggedin) {
+    website.post(`${prefix}delete_record`, (req, page) => {
+      if (req.session.dbloggedin) {
         validate_mysql_obj(() => {
           database.query(
-            `SELECT * FROM auth.permissions WHERE userId = ${req.session.userId}`,
+            `SELECT * FROM auth.permissions WHERE userId = ${req.session.dbuserId}`,
             (err, permission, x) => {
               if (err) throw err;
               database.query(
-                `SELECT * FROM auth.accounts WHERE ID = ${req.session.userId}`,
+                `SELECT * FROM auth.accounts WHERE ID = ${req.session.dbuserId}`,
                 (err, account, x) => {
                   if (err) throw err;
                   const record_information = url.parse(
@@ -150,8 +153,8 @@ module.exports = {
                             }
                             database.query(
                               `INSERT INTO history.record_changes (\`accountID\`, \`username\`, \`type\`, \`recordID\`, \`ip\`, \`table\`, \`newData\`) VALUES ('${
-                                req.session.userId
-                              }', '${req.session.username}', 'DELETE', '${
+                                req.session.dbuserId
+                              }', '${req.session.dbusername}', 'DELETE', '${
                                 dataresult[0].ID
                               }', '${req.ip}', '${record_information.db}.${
                                 record_information.table

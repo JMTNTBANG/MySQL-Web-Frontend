@@ -13,10 +13,15 @@
         align-items: center;
       }
     </style>
+    <script>
+      window.onload = () => {
+        document.register.action = `${window.location.origin}${window.location.pathname}/register`
+      }
+    </script>
   </head>
   <body>
     <div class="login">
-      <form action="/register" method="post">
+      <form name="register" action="/register" method="post">
         <center><h1>Create New Account</h1></center>
         <center>
           <label for="username">Username </label>

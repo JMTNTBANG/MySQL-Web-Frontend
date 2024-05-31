@@ -3,7 +3,10 @@ const config = require("../../config.json");
 const static_tables = require("../../staticTables.json");
 
 module.exports = {
-  init: (website) => {
+  init: (prefix, website) => {
+    if (!prefix) {
+      prefix = "/"
+    }
     // Database
     const database = mysql.createConnection({
         host: config.server.ip,
@@ -65,18 +68,18 @@ module.exports = {
             );
         });
       }
-    website.get("/logout", (req, page) => {
+    website.get(`${prefix}logout`, (req, page) => {
       validate_mysql_obj(() => {
-        if (req.session.loggedin) {
-          req.session.loggedin = false;
+        if (req.session.dbloggedin) {
+          req.session.dbloggedin = false;
         }
         database.query(
-          `INSERT INTO history.logins (\`accountID\`, \`username\`, \`ip\`, \`type\`) VALUES ('${req.session.userId}', '${req.session.username}', '${req.ip}', 'LOGOUT');`,
+          `INSERT INTO history.logins (\`accountID\`, \`username\`, \`ip\`, \`type\`) VALUES ('${req.session.dbuserId}', '${req.session.dbusername}', '${req.ip}', 'LOGOUT');`,
           (err, result) => {
             if (err) throw err;
           }
         );
-        page.redirect("/");
+        page.redirect(`${prefix}`);
       }, static_tables.history.logins);
     });
   },
