@@ -112,7 +112,7 @@ module.exports = {
                   account.permissions = permission;
                   let type;
                   const record_information = url.parse(
-                    req.rawHeaders[33],
+                    req.headers.referer,
                     true
                   ).query;
                   const record_data = req.body;
