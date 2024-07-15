@@ -102,11 +102,14 @@ module.exports = {
       for (permission of user.permissions) {
         if (permission.schema == schema) {
           if (!table || permission.table == table || permission.table == "*") {
+            let hasAll = 0
+            if (permission.canView == 1 && permission.canCreate == 1 && permission.canEdit == 1 && permission.canDelete == 1) hasAll = 1;
             return {
               canView: permission.canView,
               canCreate: permission.canCreate,
               canEdit: permission.canEdit,
               canDelete: permission.canDelete,
+              hasAll: hasAll,
             };
           } else continue;
         } else continue;
@@ -117,6 +120,7 @@ module.exports = {
           canCreate: 1,
           canEdit: 1,
           canDelete: 1,
+          hasAll: 1,
         };
       return null;
     }
@@ -375,7 +379,7 @@ module.exports = {
                               if (query.edit || query.create || query.delete) {
                                 payload += `${final}`;
                               } else {
-                                payload += `${schemas}${tables}${final}<a class="logout" href="${prefix}logout">Logout</a>`;
+                                payload += `${schemas}${tables}${final}<a class="logout" href="${prefix}logout">Logout</a><a class="sql" href="${prefix}sql">SQL</a>`;
                               }
                               page.send(payload);
                               page.end();

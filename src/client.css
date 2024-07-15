@@ -23,3 +23,9 @@ td {
   right: 10px;
   top: 10px;
 }
+
+.sql {
+  position: absolute;
+  right: 10px;
+  top: 35px;
+}

@@ -1,0 +1,44 @@
+<html>
+  <head>
+    <title>Send SQL Query</title>
+    <style>
+      body {
+        font-family: Arial, sans-serif;
+        background-color: lightgray;
+      }
+      .login {
+        min-height: 100vh;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+      }
+    </style>
+    <script>
+      window.onload = () => {
+        if (window.location.pathname.substr(-1) == "/")
+          document.login.action = `${window.location.origin}${window.location.pathname}sqlquery`;
+        else
+          document.login.action = `${window.location.origin}${window.location.pathname}/sqlquery`;
+      };
+    </script>
+  </head>
+  <body>
+    <div class="sql">
+      <form name="sql" action="/sqlquery" method="post">
+        <center><h1>Send MySQL Query to Server</h1></center>
+        <center>
+          <label for="username">Query: </label>
+          <input
+            type="text"
+            name="sqlquery"
+            placeholder="SELECT * FROM *"
+            id="sqlquery"
+            required
+          />
+        </center>
+        <br />
+        <center><input type="submit" value="Send" /></center>
+      </form>
+    </div>
+  </body>
+</html>
